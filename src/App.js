@@ -21,6 +21,3 @@ const App = () => {
 
 export default App;
 
-//hihihihih
-
-//lee jai le
