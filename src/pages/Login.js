@@ -34,7 +34,7 @@ const Login = () => {
           const firstCustomer = result.data[0];
           
           // Store JWT token
-          localStorage.setItem('authToken', firstCustomer.JwtToken);
+          localStorage.setItem('authToken', firstCustomer.jwtToken);
           
           // Store customer data
           localStorage.setItem('customerData', JSON.stringify({
