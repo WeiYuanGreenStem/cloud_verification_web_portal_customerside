@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import ApiService from '../services/api';
 
@@ -9,6 +9,16 @@ const Login = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const remembered = localStorage.getItem('rememberLogin') === 'true';
+    const rememberedEmail = localStorage.getItem('rememberEmail') || '';
+
+    if (remembered) {
+      setRememberMe(true);
+      setEmail(rememberedEmail);
+    }
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -36,8 +46,10 @@ const Login = () => {
           // Handle remember me functionality
           if (rememberMe) {
             localStorage.setItem('rememberLogin', 'true');
+            localStorage.setItem('rememberEmail', email);
           } else {
             localStorage.removeItem('rememberLogin');
+            localStorage.removeItem('rememberEmail');
           }
           
           // Navigate to home page on successful login
