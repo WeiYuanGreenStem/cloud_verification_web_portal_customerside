@@ -21,6 +21,7 @@ class ApiService {
           config.headers.Authorization = `Bearer ${token}`;
         }
         console.log('Making API request to:', config.baseURL + config.url);
+        console.log('Request data:', config.data);
         return config;
       },
       (error) => {
@@ -32,49 +33,14 @@ class ApiService {
     // Response interceptor for centralized error handling
     this.axiosInstance.interceptors.response.use(
       (response) => {
-        return {
-          success: true,
-          data: response.data,
-          status: response.status,
-        };
+        // Log the full response for debugging
+        console.log('API Response:', response.data);
+        
+        return response; // Return the axios response object directly
       },
       (error) => {
         console.error('API Response Error:', error);
-        
-        if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
-          return {
-            success: false,
-            error: 'Unable to connect to server. Please check if the API server is running.',
-            status: 0,
-          };
-        }
-
-        if (error.response) {
-          // Server responded with error status
-          const errorMessage = error.response.data?.message || 
-                              error.response.data?.title || 
-                              `HTTP error! status: ${error.response.status}`;
-          
-          return {
-            success: false,
-            error: errorMessage,
-            status: error.response.status,
-          };
-        } else if (error.request) {
-          // Request was made but no response received
-          return {
-            success: false,
-            error: 'No response from server. Please check your connection.',
-            status: 0,
-          };
-        } else {
-          // Something else happened
-          return {
-            success: false,
-            error: error.message || 'An unexpected error occurred.',
-            status: 500,
-          };
-        }
+        return Promise.reject(error); // Let the error be handled in makeRequest
       }
     );
   }
@@ -92,9 +58,61 @@ class ApiService {
       }
 
       const response = await this.axiosInstance(config);
-      return response;
+      
+      // Return success response
+      return {
+        success: true,
+        data: response.data,
+        status: response.status,
+      };
+      
     } catch (error) {
-      return error;
+      console.error('API Error in makeRequest:', error);
+      
+      if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+        return {
+          success: false,
+          error: 'Unable to connect to server. Please check if the API server is running.',
+          status: 0,
+        };
+      }
+
+      if (error.response) {
+        // Server responded with error status
+        const errorData = error.response.data;
+        let errorMessage = 'An error occurred';
+        
+        // Handle your API response structure
+        if (errorData && errorData.Message) {
+          errorMessage = errorData.Message;
+        } else if (errorData && errorData.message) {
+          errorMessage = errorData.message;
+        } else if (errorData && errorData.title) {
+          errorMessage = errorData.title;
+        } else {
+          errorMessage = `HTTP error! status: ${error.response.status}`;
+        }
+        
+        return {
+          success: false,
+          error: errorMessage,
+          status: error.response.status,
+        };
+      } else if (error.request) {
+        // Request was made but no response received
+        return {
+          success: false,
+          error: 'No response from server. Please check your connection.',
+          status: 0,
+        };
+      } else {
+        // Something else happened
+        return {
+          success: false,
+          error: error.message || 'An unexpected error occurred.',
+          status: 500,
+        };
+      }
     }
   }
 
@@ -108,26 +126,37 @@ class ApiService {
 
   // Send OTP for forgot password
   async sendForgotPasswordOTP(email) {
-    return this.makeRequest('POST', '/api/ForgotPassword/send-otp', {
+    return this.makeRequest('POST', '/api/Customer/send-password-reset-otp', {
       Email: email,
     });
   }
 
   // Verify OTP
   async verifyOTP(email, otp) {
-    return this.makeRequest('POST', '/api/ForgotPassword/verify-otp', {
+    return this.makeRequest('POST', '/api/Customer/verify-password-reset-otp', {
       Email: email,
       OTP: otp,
     });
   }
 
-  // Reset password
-  async resetPassword(email, otp, newPassword) {
-    return this.makeRequest('POST', '/api/ForgotPassword/reset-password', {
+  // Reset password - Updated to match your ResetPasswordRequestDto structure
+  async resetPassword(email, newPassword, confirmPassword = null) {
+    // If confirmPassword is not provided, use newPassword (for backward compatibility)
+    const requestData = {
       Email: email,
-      OTP: otp,
       NewPassword: newPassword,
-    });
+    };
+
+    // Add ConfirmPassword if your DTO requires it
+    if (confirmPassword !== null) {
+      requestData.ConfirmPassword = confirmPassword;
+    } else {
+      requestData.ConfirmPassword = newPassword; // Assume they match if not provided separately
+    }
+
+    console.log('Reset Password Request Data:', requestData);
+    
+    return this.makeRequest('POST', '/api/Customer/reset-password', requestData);
   }
 
   // Get requests example (for future use)

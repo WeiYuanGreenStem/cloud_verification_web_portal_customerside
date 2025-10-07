@@ -25,11 +25,37 @@ const ForgotPassword = () => {
 
     try {
       const result = await ApiService.sendForgotPasswordOTP(email);
+      
+      console.log('Send OTP Result:', result); // Debug log
+      console.log('Result Success:', result.success); // Debug log
 
       if (result.success) {
-        setMessage('OTP has been sent to your email address.');
-        setStep(2);
+        const apiData = result.data;
+        console.log('API Data:', apiData); // Debug log
+        console.log('API Data Success:', apiData?.Success); // Debug log
+        console.log('API Data success:', apiData?.success); // Debug log
+        
+        // More flexible success checking - handle different response formats
+        const isSuccess = apiData?.Success === true || 
+                         apiData?.success === true || 
+                         result.status === 200;
+        
+        console.log('Is Success:', isSuccess); // Debug log
+        
+        if (isSuccess) {
+          const successMessage = apiData?.Message || 
+                                apiData?.message || 
+                                'OTP has been sent to your email address.';
+          setMessage(successMessage);
+          setStep(2);
+        } else {
+          const errorMessage = apiData?.Message || 
+                              apiData?.message || 
+                              'Failed to send OTP. Please try again.';
+          setError(errorMessage);
+        }
       } else {
+        console.log('Result not successful, error:', result.error); // Debug log
         setError(result.error || 'Failed to send OTP. Please try again.');
       }
     } catch (error) {
@@ -48,10 +74,30 @@ const ForgotPassword = () => {
 
     try {
       const result = await ApiService.verifyOTP(email, otp);
+      
+      console.log('Verify OTP Result:', result); // Debug log
 
       if (result.success) {
-        setMessage('OTP verified successfully. Please set your new password.');
-        setStep(3);
+        const apiData = result.data;
+        console.log('Verify API Data:', apiData); // Debug log
+        
+        // More flexible success checking
+        const isSuccess = apiData?.Success === true || 
+                         apiData?.success === true || 
+                         result.status === 200;
+        
+        if (isSuccess) {
+          const successMessage = apiData?.Message || 
+                                apiData?.message || 
+                                'OTP verified successfully. Please set your new password.';
+          setMessage(successMessage);
+          setStep(3); // Move to password reset step
+        } else {
+          const errorMessage = apiData?.Message || 
+                              apiData?.message || 
+                              'Invalid OTP. Please try again.';
+          setError(errorMessage);
+        }
       } else {
         setError(result.error || 'Invalid OTP. Please try again.');
       }
@@ -63,7 +109,7 @@ const ForgotPassword = () => {
     }
   };
 
-  // Step 3: Reset Password
+  // Step 3: Reset Password (NO OTP REQUIRED - Email already verified)
   const handleResetPassword = async (e) => {
     e.preventDefault();
     setIsLoading(true);
@@ -82,14 +128,43 @@ const ForgotPassword = () => {
       return;
     }
 
+    // Additional password validation
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]/;
+    if (!passwordRegex.test(newPassword)) {
+      setError('Password must contain at least one uppercase letter, one lowercase letter, one number, and one special character.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const result = await ApiService.resetPassword(email, otp, newPassword);
+      // Send email, newPassword, and confirmPassword to match your DTO
+      const result = await ApiService.resetPassword(email, newPassword, confirmPassword);
+      
+      console.log('Reset Password Result:', result); // Debug log
 
       if (result.success) {
-        setMessage('Password reset successfully! Redirecting to login...');
-        setTimeout(() => {
-          navigate('/login');
-        }, 2000);
+        const apiData = result.data;
+        console.log('Reset API Data:', apiData); // Debug log
+        
+        // More flexible success checking
+        const isSuccess = apiData?.Success === true || 
+                         apiData?.success === true || 
+                         result.status === 200;
+        
+        if (isSuccess) {
+          const successMessage = apiData?.Message || 
+                                apiData?.message || 
+                                'Password reset successfully! Redirecting to login...';
+          setMessage(successMessage);
+          setTimeout(() => {
+            navigate('/login');
+          }, 2000);
+        } else {
+          const errorMessage = apiData?.Message || 
+                              apiData?.message || 
+                              'Failed to reset password. Please try again.';
+          setError(errorMessage);
+        }
       } else {
         setError(result.error || 'Failed to reset password. Please try again.');
       }
@@ -109,9 +184,29 @@ const ForgotPassword = () => {
 
     try {
       const result = await ApiService.sendForgotPasswordOTP(email);
+      
+      console.log('Resend OTP Result:', result); // Debug log
 
       if (result.success) {
-        setMessage('New OTP has been sent to your email address.');
+        const apiData = result.data;
+        console.log('Resend API Data:', apiData); // Debug log
+        
+        // More flexible success checking
+        const isSuccess = apiData?.Success === true || 
+                         apiData?.success === true || 
+                         result.status === 200;
+        
+        if (isSuccess) {
+          const successMessage = apiData?.Message || 
+                                apiData?.message || 
+                                'New OTP has been sent to your email address.';
+          setMessage(successMessage);
+        } else {
+          const errorMessage = apiData?.Message || 
+                              apiData?.message || 
+                              'Failed to resend OTP. Please try again.';
+          setError(errorMessage);
+        }
       } else {
         setError(result.error || 'Failed to resend OTP. Please try again.');
       }
@@ -177,7 +272,7 @@ const ForgotPassword = () => {
                 type="text"
                 placeholder="Enter 6-digit OTP"
                 value={otp}
-                onChange={(e) => setOtp(e.target.value)}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))} // Only allow digits, max 6
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-center text-2xl tracking-widest"
                 maxLength="6"
                 required
@@ -187,7 +282,7 @@ const ForgotPassword = () => {
 
             <button
               type="submit"
-              disabled={isLoading}
+              disabled={isLoading || otp.length !== 6}
               className="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isLoading ? 'Verifying...' : 'Verify OTP'}
@@ -215,7 +310,7 @@ const ForgotPassword = () => {
             <div className="text-center mb-6">
               <Lock className="mx-auto h-12 w-12 text-green-600 mb-4" />
               <h2 className="text-2xl font-bold text-gray-800 mb-2">Reset Password</h2>
-              <p className="text-gray-600">Enter your new password below</p>
+              <p className="text-gray-600">Your email has been verified. Enter your new password below.</p>
             </div>
 
             <div>
@@ -241,6 +336,9 @@ const ForgotPassword = () => {
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Password must be at least 8 characters with uppercase, lowercase, number, and special character
+              </p>
             </div>
 
             <div>
@@ -266,6 +364,16 @@ const ForgotPassword = () => {
                   {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
               </div>
+            </div>
+
+            {/* Note to user that OTP verification is complete */}
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <p className="text-sm text-green-700 flex items-center">
+                <svg className="w-4 h-4 mr-2 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                Email verified successfully. No OTP required for password reset.
+              </p>
             </div>
 
             <button
