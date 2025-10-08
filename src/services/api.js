@@ -20,12 +20,9 @@ class ApiService {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
-        console.log('Making API request to:', config.baseURL + config.url);
-        console.log('Request data:', config.data);
         return config;
       },
       (error) => {
-        console.error('Request interceptor error:', error);
         return Promise.reject(error);
       }
     );
@@ -33,16 +30,29 @@ class ApiService {
     // Response interceptor for centralized error handling
     this.axiosInstance.interceptors.response.use(
       (response) => {
-        // Log the full response for debugging
-        console.log('API Response:', response.data);
-        
-        return response; // Return the axios response object directly
+        return response;
       },
       (error) => {
-        console.error('API Response Error:', error);
-        return Promise.reject(error); // Let the error be handled in makeRequest
+        // Handle 401 Unauthorized - Token expired or invalid
+        if (error.response?.status === 401) {
+          this.handleAuthenticationError();
+        }
+        return Promise.reject(error);
       }
     );
+  }
+
+  // Handle authentication errors (401)
+  handleAuthenticationError() {
+    console.log('[API] Handling authentication error - clearing tokens');
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('customerData');
+    
+    // Redirect to login page if not already there
+    if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+      console.log('[API] Redirecting to login page');
+      window.location.href = '/login';
+    }
   }
 
   // Helper method to make HTTP requests
@@ -57,6 +67,7 @@ class ApiService {
         config.data = data;
       }
 
+      console.log(`[API] Making ${method} request to: ${endpoint}`);
       const response = await this.axiosInstance(config);
       
       // Return success response
@@ -67,13 +78,14 @@ class ApiService {
       };
       
     } catch (error) {
-      console.error('API Error in makeRequest:', error);
+      console.error(`[API] Error in ${method} ${endpoint}:`, error);
       
       if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
         return {
           success: false,
           error: 'Unable to connect to server. Please check if the API server is running.',
           status: 0,
+          isNetworkError: true,
         };
       }
 
@@ -82,21 +94,33 @@ class ApiService {
         const errorData = error.response.data;
         let errorMessage = 'An error occurred';
         
-        // Handle your API response structure
-        if (errorData && errorData.Message) {
-          errorMessage = errorData.Message;
-        } else if (errorData && errorData.message) {
-          errorMessage = errorData.message;
-        } else if (errorData && errorData.title) {
-          errorMessage = errorData.title;
+        // Handle different error status codes
+        if (error.response.status === 401) {
+          errorMessage = 'Authentication failed. Please log in again.';
+        } else if (error.response.status === 403) {
+          errorMessage = 'Access denied. You do not have permission to access this resource.';
+        } else if (error.response.status === 404) {
+          errorMessage = 'The requested resource was not found.';
+        } else if (error.response.status === 500) {
+          errorMessage = 'Internal server error. Please try again later.';
         } else {
-          errorMessage = `HTTP error! status: ${error.response.status}`;
+          // Handle your API response structure
+          if (errorData && errorData.message) {
+            errorMessage = errorData.message;
+          } else if (errorData && errorData.Message) {
+            errorMessage = errorData.Message;
+          } else if (errorData && errorData.title) {
+            errorMessage = errorData.title;
+          } else {
+            errorMessage = `HTTP error! status: ${error.response.status}`;
+          }
         }
         
         return {
           success: false,
           error: errorMessage,
           status: error.response.status,
+          isAuthError: error.response.status === 401,
         };
       } else if (error.request) {
         // Request was made but no response received
@@ -104,6 +128,7 @@ class ApiService {
           success: false,
           error: 'No response from server. Please check your connection.',
           status: 0,
+          isNetworkError: true,
         };
       } else {
         // Something else happened
@@ -116,12 +141,29 @@ class ApiService {
     }
   }
 
-  // Login API
+  // Login API - Enhanced to better handle token storage
   async login(email, password) {
-    return this.makeRequest('POST', '/api/Login/login', {
+    const result = await this.makeRequest('POST', '/api/Login/login', {
       Email: email,
       Password: password,
     });
+
+    // If login is successful, store the token and user data
+    if (result.success && result.data?.Success) {
+      const loginData = result.data.Data;
+      
+      // Store the authentication token
+      if (loginData?.Token) {
+        localStorage.setItem('authToken', loginData.Token);
+      }
+      
+      // Store customer data
+      if (loginData?.Customer) {
+        localStorage.setItem('customerData', JSON.stringify(loginData.Customer));
+      }
+    }
+
+    return result;
   }
 
   // Send OTP for forgot password
@@ -139,52 +181,128 @@ class ApiService {
     });
   }
 
-  // Reset password - Updated to match your ResetPasswordRequestDto structure
+  // Reset password
   async resetPassword(email, newPassword, confirmPassword = null) {
-    // If confirmPassword is not provided, use newPassword (for backward compatibility)
     const requestData = {
       Email: email,
       NewPassword: newPassword,
     };
 
-    // Add ConfirmPassword if your DTO requires it
     if (confirmPassword !== null) {
       requestData.ConfirmPassword = confirmPassword;
     } else {
-      requestData.ConfirmPassword = newPassword; // Assume they match if not provided separately
+      requestData.ConfirmPassword = newPassword;
     }
 
-    console.log('Reset Password Request Data:', requestData);
+    console.log('[API] Reset Password Request Data:', requestData);
     
     return this.makeRequest('POST', '/api/Customer/reset-password', requestData);
   }
 
-  // Get requests example (for future use)
-  async getCustomers() {
-    return this.makeRequest('GET', '/api/customers');
+  // ===== DEVICE LICENSE KEY METHODS =====
+  
+  // Get all device license keys for customer portal
+  async getDeviceLicenseKeysForCustomerPortal(customerCode) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('GET', `/api/DeviceLicenseKey/customer-portal/${customerCode}`);
   }
 
-  // PUT request example (for future use)
-  async updateCustomer(customerId, customerData) {
-    return this.makeRequest('PUT', `/api/customers/${customerId}`, customerData);
+  // Get device license key statistics
+  async getDeviceLicenseKeyStatistics(customerCode) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('GET', `/api/DeviceLicenseKey/statistics/${customerCode}`);
   }
 
-  // DELETE request example (for future use)
-  async deleteCustomer(customerId) {
-    return this.makeRequest('DELETE', `/api/customers/${customerId}`);
+  // Search device license keys with filters and pagination
+  async searchDeviceLicenseKeysWithFilters(filterData) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('POST', '/api/DeviceLicenseKey/search-with-filters', filterData);
   }
+
+  // Get single device license key details
+  async getDeviceLicenseKeyDetails(deviceLicenseKeyCode) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('GET', `/api/DeviceLicenseKey/details/${deviceLicenseKeyCode}`);
+  }
+
+  // ===== EXISTING METHODS =====
 
   // Logout
   async logout() {
+    console.log('[API] Logging out - clearing tokens');
     localStorage.removeItem('authToken');
     localStorage.removeItem('customerData');
     return { success: true };
   }
 
-  // Get current user info
   getCurrentUser() {
     const customerData = localStorage.getItem('customerData');
-    return customerData ? JSON.parse(customerData) : null;
+    if (customerData) {
+      try {
+        return JSON.parse(customerData);
+      } catch (error) {
+        localStorage.removeItem('customerData');
+        return null;
+      }
+    }
+    return null;
+  }
+
+  getCurrentCustomerCode() {
+    const userData = this.getCurrentUser();
+    
+    if (userData) {
+      if (userData.customers && userData.customers.length > 0) {
+        return userData.customers[0].customerCode;
+      }
+      if (userData.customerCode) {
+        return userData.customerCode;
+      }
+      if (userData.CustomerCode) {
+        return userData.CustomerCode;
+      }
+      if (userData.Customer && userData.Customer.CustomerCode) {
+        return userData.Customer.CustomerCode;
+      }
+    }
+    
+    return null;
   }
 
   // Check if user is authenticated
@@ -196,11 +314,18 @@ class ApiService {
   // Set auth token (useful for login)
   setAuthToken(token) {
     localStorage.setItem('authToken', token);
+    console.log('[API] Auth token set manually');
   }
 
   // Remove auth token
   removeAuthToken() {
     localStorage.removeItem('authToken');
+    console.log('[API] Auth token removed');
+  }
+
+  // Get current auth token
+  getAuthToken() {
+    return localStorage.getItem('authToken');
   }
 }
 
