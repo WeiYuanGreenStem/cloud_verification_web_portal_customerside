@@ -30,19 +30,56 @@ const UserAccountManagement = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Authentication protection
+  useEffect(() => {
+    // Check authentication on component mount
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Handle browser back/forward navigation
+    const handlePopState = () => {
+      if (!ApiService.isAuthenticated()) {
+        navigate('/login', { replace: true });
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [navigate]);
+
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
 
   const handleEdit = (username) => {
+    // Check authentication before allowing edit
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
     console.log('Edit user:', username);
   };
 
   const handleDelete = (username) => {
+    // Check authentication before allowing delete
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
     console.log('Delete user:', username);
   };
 
   const handleCreateUser = () => {
+    // Check authentication before allowing create
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
     setShowCreateModal(true);
   };
   
