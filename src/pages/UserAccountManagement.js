@@ -1,14 +1,39 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Edit2, Trash2, Plus } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
+import ApiService from '../services/api';
 
 const UserAccountManagement = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [rowsPerPage, setRowsPerPage] = useState(7);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Authentication protection
+  useEffect(() => {
+    // Check authentication on component mount
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Handle browser back/forward navigation
+    const handlePopState = () => {
+      if (!ApiService.isAuthenticated()) {
+        navigate('/login', { replace: true });
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [navigate]);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -109,14 +134,29 @@ const UserAccountManagement = () => {
   ];
 
   const handleEdit = (username) => {
+    // Check authentication before allowing edit
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
     console.log('Edit user:', username);
   };
 
   const handleDelete = (username) => {
+    // Check authentication before allowing delete
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
     console.log('Delete user:', username);
   };
 
   const handleCreateUser = () => {
+    // Check authentication before allowing create
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
     setShowCreateModal(true);
   };
 
@@ -131,6 +171,11 @@ const UserAccountManagement = () => {
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.position.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Don't render content if not authenticated
+  if (!ApiService.isAuthenticated()) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">

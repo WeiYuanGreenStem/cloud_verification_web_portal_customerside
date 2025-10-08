@@ -1,10 +1,36 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
+import ApiService from '../services/api';
 
 const Home = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check authentication on component mount
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Handle browser back/forward navigation
+    const handlePopState = () => {
+      if (!ApiService.isAuthenticated()) {
+        navigate('/login', { replace: true });
+      }
+    };
+
+    // Add event listener for browser navigation
+    window.addEventListener('popstate', handlePopState);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [navigate]);
+
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };

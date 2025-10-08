@@ -44,14 +44,17 @@ class ApiService {
 
   // Handle authentication errors (401)
   handleAuthenticationError() {
-    console.log('[API] Handling authentication error - clearing tokens');
+    // Clear tokens
     localStorage.removeItem('authToken');
     localStorage.removeItem('customerData');
+    localStorage.removeItem('rememberLogin');
+    localStorage.removeItem('rememberEmail');
     
-    // Redirect to login page if not already there
+    // Clear browser history and redirect
     if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
-      console.log('[API] Redirecting to login page');
-      window.location.href = '/login';
+      // Use replace to prevent back navigation
+      window.history.replaceState(null, null, '/login');
+      window.location.replace('/login');
     }
   }
 
@@ -67,7 +70,6 @@ class ApiService {
         config.data = data;
       }
 
-      console.log(`[API] Making ${method} request to: ${endpoint}`);
       const response = await this.axiosInstance(config);
       
       // Return success response
@@ -78,8 +80,6 @@ class ApiService {
       };
       
     } catch (error) {
-      console.error(`[API] Error in ${method} ${endpoint}:`, error);
-      
       if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
         return {
           success: false,
@@ -141,7 +141,7 @@ class ApiService {
     }
   }
 
-  // Login API - Enhanced to better handle token storage
+  // Login API
   async login(email, password) {
     const result = await this.makeRequest('POST', '/api/Login/login', {
       Email: email,
@@ -149,17 +149,32 @@ class ApiService {
     });
 
     // If login is successful, store the token and user data
-    if (result.success && result.data?.Success) {
-      const loginData = result.data.Data;
+    if (result.success && result.status === 200) {
+      const responseData = result.data;
       
-      // Store the authentication token
-      if (loginData?.Token) {
-        localStorage.setItem('authToken', loginData.Token);
-      }
-      
-      // Store customer data
-      if (loginData?.Customer) {
-        localStorage.setItem('customerData', JSON.stringify(loginData.Customer));
+      // Handle array response (your API returns an array)
+      if (Array.isArray(responseData) && responseData.length > 0) {
+        const loginData = responseData[0]; // Get first element from array
+        
+        // Store the authentication token - your API uses 'jwtToken'
+        if (loginData?.jwtToken) {
+          localStorage.setItem('authToken', loginData.jwtToken);
+        }
+        
+        // Store customer data
+        const customerData = {
+          customerCode: loginData.customerCode,
+          customerName: loginData.customerName,
+          email: email, // Add email for header display
+          customers: [
+            {
+              customerCode: loginData.customerCode,
+              customerName: loginData.customerName
+            }
+          ]
+        };
+        
+        localStorage.setItem('customerData', JSON.stringify(customerData));
       }
     }
 
@@ -193,8 +208,6 @@ class ApiService {
     } else {
       requestData.ConfirmPassword = newPassword;
     }
-
-    console.log('[API] Reset Password Request Data:', requestData);
     
     return this.makeRequest('POST', '/api/Customer/reset-password', requestData);
   }
@@ -261,13 +274,15 @@ class ApiService {
     return this.makeRequest('GET', `/api/DeviceLicenseKey/details/${deviceLicenseKeyCode}`);
   }
 
-  // ===== EXISTING METHODS =====
+  // ===== UTILITY METHODS =====
 
   // Logout
   async logout() {
-    console.log('[API] Logging out - clearing tokens');
+    // Clear all authentication-related data
     localStorage.removeItem('authToken');
     localStorage.removeItem('customerData');
+    localStorage.removeItem('userPreferences');
+    
     return { success: true };
   }
 
@@ -309,23 +324,6 @@ class ApiService {
   isAuthenticated() {
     const token = localStorage.getItem('authToken');
     return !!token;
-  }
-
-  // Set auth token (useful for login)
-  setAuthToken(token) {
-    localStorage.setItem('authToken', token);
-    console.log('[API] Auth token set manually');
-  }
-
-  // Remove auth token
-  removeAuthToken() {
-    localStorage.removeItem('authToken');
-    console.log('[API] Auth token removed');
-  }
-
-  // Get current auth token
-  getAuthToken() {
-    return localStorage.getItem('authToken');
   }
 }
 

@@ -10,7 +10,13 @@ const Login = () => {
   const [error, setError] = useState('');
   const navigate = useNavigate();
 
+  // Check if user is already logged in when component mounts
   useEffect(() => {
+    if (ApiService.isAuthenticated()) {
+      navigate('/home', { replace: true });
+      return;
+    }
+
     const remembered = localStorage.getItem('rememberLogin') === 'true';
     const rememberedEmail = localStorage.getItem('rememberEmail') || '';
 
@@ -18,7 +24,7 @@ const Login = () => {
       setRememberMe(true);
       setEmail(rememberedEmail);
     }
-  }, []);
+  }, [navigate]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -27,41 +33,43 @@ const Login = () => {
     
     try {
       const result = await ApiService.login(email, password);
+      
+      const isSuccess = result.success && result.status === 200;
 
-      if (result.success) {
-        // Store authentication data
-        if (result.data && result.data.length > 0) {
-          const firstCustomer = result.data[0];
+      if (isSuccess) {
+        // Wait a moment for localStorage to be updated
+        setTimeout(() => {
+          const isNowAuthenticated = ApiService.isAuthenticated();
           
-          // Store JWT token
-          localStorage.setItem('authToken', firstCustomer.jwtToken);
-          
-          // Store customer data
-          localStorage.setItem('customerData', JSON.stringify({
-            customers: result.data,
-            email: email,
-            loginTime: new Date().toISOString()
-          }));
-
-          // Handle remember me functionality
-          if (rememberMe) {
-            localStorage.setItem('rememberLogin', 'true');
-            localStorage.setItem('rememberEmail', email);
+          if (isNowAuthenticated) {
+            // Handle remember me functionality
+            if (rememberMe) {
+              localStorage.setItem('rememberLogin', 'true');
+              localStorage.setItem('rememberEmail', email);
+            } else {
+              localStorage.removeItem('rememberLogin');
+              localStorage.removeItem('rememberEmail');
+            }
+            
+            // Clear form
+            setEmail('');
+            setPassword('');
+            
+            // Navigate to home and replace history to prevent back navigation to login
+            navigate('/home', { replace: true });
           } else {
-            localStorage.removeItem('rememberLogin');
-            localStorage.removeItem('rememberEmail');
+            setError('Authentication failed. Please try again.');
           }
-          
-          // Navigate to home page on successful login
-          navigate('/home');
-        } else {
-          setError('Login successful but no customer data received.');
-        }
+        }, 100);
+        
       } else {
-        setError(result.error || 'Login failed. Please try again.');
+        const errorMessage = result.error || 
+                           result.data?.Message || 
+                           result.data?.message || 
+                           'Login failed. Please check your credentials and try again.';
+        setError(errorMessage);
       }
     } catch (error) {
-      console.error('Login error:', error);
       setError('An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);

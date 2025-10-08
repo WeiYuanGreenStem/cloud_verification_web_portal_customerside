@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef} from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Edit2, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import ApiService from '../services/api';
 
 const DeviceLicenseKeyManagement = () => {
+  const navigate = useNavigate();
   const hasFetchedRef = useRef(false);
   const [activeTab, setActiveTab] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -18,6 +20,28 @@ const DeviceLicenseKeyManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Authentication protection
+  useEffect(() => {
+    // Check authentication on component mount
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
+
+    // Handle browser back/forward navigation
+    const handlePopState = () => {
+      if (!ApiService.isAuthenticated()) {
+        navigate('/login', { replace: true });
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [navigate]);
   
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
@@ -55,6 +79,12 @@ const DeviceLicenseKeyManagement = () => {
       setIsLoading(true);
       setError('');
       
+      // Double-check authentication before making API calls
+      if (!ApiService.isAuthenticated()) {
+        navigate('/login', { replace: true });
+        return;
+      }
+      
       const customerCode = getCustomerCode();
       if (!customerCode) {
         setError('Customer authentication required. Please log in again.');
@@ -74,6 +104,10 @@ const DeviceLicenseKeyManagement = () => {
         }
       } else if (result.status === 401 || result.isAuthError) {
         setError('Your session has expired. Please log in again.');
+        // Redirect to login on authentication error
+        setTimeout(() => {
+          navigate('/login', { replace: true });
+        }, 2000);
         return;
       } else {
         const errorMessage = result.error || 'Failed to fetch device license keys';
@@ -98,6 +132,12 @@ const DeviceLicenseKeyManagement = () => {
 
   // Refresh data
   const handleRefresh = async () => {
+    // Check authentication before refreshing
+    if (!ApiService.isAuthenticated()) {
+      navigate('/login', { replace: true });
+      return;
+    }
+    
     setIsRefreshing(true);
     await fetchDeviceLicenseKeys();
     setIsRefreshing(false);
@@ -105,11 +145,11 @@ const DeviceLicenseKeyManagement = () => {
 
   // Load data on component mount
   useEffect(() => {
-    if (!hasFetchedRef.current) {
+    if (!hasFetchedRef.current && ApiService.isAuthenticated()) {
       hasFetchedRef.current = true;
       fetchDeviceLicenseKeys();
     }
-  }, []);
+  }, [navigate]);
 
   const handleEdit = (deviceLicenseKeyCode) => {
     console.log('Edit license key:', deviceLicenseKeyCode);
@@ -222,6 +262,11 @@ const DeviceLicenseKeyManagement = () => {
       return dateString;
     }
   };
+
+  // Don't render content if not authenticated
+  if (!ApiService.isAuthenticated()) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 flex">

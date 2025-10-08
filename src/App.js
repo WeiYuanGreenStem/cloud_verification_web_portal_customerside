@@ -5,17 +5,68 @@ import Home from './pages/Home';
 import DeviceLicenseKeyManagement from './pages/DeviceLicenseKeyManagement';
 import UserAccountManagement from './pages/UserAccountManagement';
 import ForgotPassword from './pages/ForgotPassword';
+import ProtectedRoute from './components/ProtectedRoute';
+import PublicRoute from './components/PublicRoute';
 
 const App = () => {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        <Route path="/home" element={<Home />} />
-        <Route path="/devices" element={<DeviceLicenseKeyManagement />} />
-        <Route path="/users" element={<UserAccountManagement />} />
+        {/* Default redirect based on authentication status */}
+        <Route 
+          path="/" 
+          element={<Navigate to="/login" replace />} 
+        />
+        
+        {/* Public routes - only accessible when NOT logged in */}
+        <Route 
+          path="/login" 
+          element={
+            <PublicRoute>
+              <Login />
+            </PublicRoute>
+          } 
+        />
+        <Route 
+          path="/forgot-password" 
+          element={
+            <PublicRoute>
+              <ForgotPassword />
+            </PublicRoute>
+          } 
+        />
+        
+        {/* Protected routes - only accessible when logged in */}
+        <Route 
+          path="/home" 
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/devices" 
+          element={
+            <ProtectedRoute>
+              <DeviceLicenseKeyManagement />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/users" 
+          element={
+            <ProtectedRoute>
+              <UserAccountManagement />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Catch all route - redirect to appropriate page */}
+        <Route 
+          path="*" 
+          element={<Navigate to="/" replace />} 
+        />
       </Routes>
     </Router>
   );
