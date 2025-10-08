@@ -202,6 +202,29 @@ class ApiService {
   removeAuthToken() {
     localStorage.removeItem('authToken');
   }
+
+  async getApplication() {
+    // Retrieve token from local storage
+    const token = localStorage.getItem('authToken');
+
+    // Set Authorization header for the axios instance
+    if (token) {
+      this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      // Clear header if no token found
+      delete this.axiosInstance.defaults.headers.common['Authorization'];
+    }
+
+    // Call makeRequest with GET method and endpoint
+    const result = await this.makeRequest('get', '/api/subscribe-applications');
+
+    if (result.success) {
+      return result.data;
+    } else {
+      // Optionally throw or handle the error here
+      throw new Error(result.error);
+    }
+  }
 }
 
 export default new ApiService();
