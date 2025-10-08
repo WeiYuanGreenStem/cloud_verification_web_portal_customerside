@@ -341,7 +341,48 @@ class ApiService {
     }
 
     // Call makeRequest with GET method and endpoint
-    const result = await this.makeRequest('get', '/api/subscribe-applications');
+    const result = await this.makeRequest('get', '/api/CustomerGeneral/subscribe-applications');
+
+    if (result.success) {
+      return result.data;
+    } else {
+      // Optionally throw or handle the error here
+      throw new Error(result.error);
+    }
+  }
+  // Accept params for pagination and filtering
+  async getUserAccountList({ pageNumber = 1, pageSize = 5 } = {}) {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete this.axiosInstance.defaults.headers.common['Authorization'];
+    }
+
+    const query = `?pageNumber=${pageNumber}&pageSize=${pageSize}`;
+    const result = await this.makeRequest('get', `/api/CustomerUserAccount/get-useraccount-list-by-customer${query}`);
+
+    if (result.success) {
+      return result.data;
+    } else {
+      throw new Error(result.error);
+    }
+  }
+
+  async getUserCountAndEmailsByApplication() {
+    // Retrieve token from local storage
+    const token = localStorage.getItem('authToken');
+
+    // Set Authorization header for the axios instance
+    if (token) {
+      this.axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      // Clear header if no token found
+      delete this.axiosInstance.defaults.headers.common['Authorization'];
+    }
+
+    // Call makeRequest with GET method and endpoint
+    const result = await this.makeRequest('get', '/api/CustomerUserAccount/user-count-and-emails-by-application');
 
     if (result.success) {
       return result.data;

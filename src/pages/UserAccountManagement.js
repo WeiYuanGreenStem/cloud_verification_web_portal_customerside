@@ -1,112 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, Edit2, Trash2, Plus } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
+import ApiService from '../services/api';
 
 const UserAccountManagement = () => {
+  //Tab variables
   const [activeTab, setActiveTab] = useState('all');
+  const [fetchedApps, setFetchedApps] = useState([]);
+  const [loadingApps, setLoadingApps] = useState(true);
+
+  //User table variables
+  const [allUsers, setAllUsers] = useState([]); // Flattened list of users
+  const [loadingUsers, setLoadingUsers] = useState(true);
+
+  //Paging variables
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(5); // same as pageSize
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+
+  //Number User Widget variables
+  const [appList, setAppList] = useState([]);
+  const [usageStats, setUsageStats] = useState({});
+
+
+  //
   const [searchTerm, setSearchTerm] = useState('');
-  const [rowsPerPage, setRowsPerPage] = useState(7);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
-
-  const userStats = {
-    all: { active: 19, total: 20, percentage: 95 },
-    warehouse: { active: 6, total: 6, percentage: 100 },
-    salesman: { active: 6, total: 7, percentage: 86 },
-    management: { active: 7, total: 7, percentage: 100 }
-  };
-
-  const users = [
-    { 
-      username: 'John Smith', 
-      email: 'john.smith@gmail.com', 
-      app: 'WHA', 
-      status: 'Active', 
-      position: 'StoreKeeper', 
-      area: 'IPOH', 
-      created: '26-06-2024', 
-      lastActive: '2025-08-19 11:32:15', 
-      lastUpdate: '2025-08-19 11:54:26', 
-      device: 'iPhone 15 Pro (John Smith)' 
-    },
-    { 
-      username: 'Olivia Bennett', 
-      email: 'olivyben@gmail.com', 
-      app: 'SMA', 
-      status: 'Inactive', 
-      position: 'Accountant', 
-      area: 'KL', 
-      created: '15-11-2024', 
-      lastActive: '2025-06-19 14:18:56', 
-      lastUpdate: '2025-08-27 13:20:53', 
-      device: 'Oppo Find X7 (Olivia Bennett)' 
-    },
-    { 
-      username: 'Daniel Warren', 
-      email: 'dwarren3@gmail.com', 
-      app: 'WHA', 
-      status: 'Inactive', 
-      position: 'Salesman', 
-      area: 'Klang', 
-      created: '08-07-2024', 
-      lastActive: '2025-03-15 22:15:06', 
-      lastUpdate: '2025-09-05 12:43:09', 
-      device: 'Samsung Galaxy S23 (Daniel Warren)' 
-    },
-    { 
-      username: 'Chloe Hayes', 
-      email: 'chloehiyes@gmail.com', 
-      app: 'MNGA', 
-      status: 'Active', 
-      position: 'Manager', 
-      area: 'KL', 
-      created: '11-09-2024', 
-      lastActive: '2025-09-11 19:06:22', 
-      lastUpdate: '2025-09-08 09:18:48', 
-      device: 'Honor Magic6 (Chloe Hayes)' 
-    },
-    { 
-      username: 'Marcus Reed', 
-      email: 'reeds777@gmail.com', 
-      app: 'SMA', 
-      status: 'Inactive', 
-      position: 'StoreKeeper', 
-      area: 'IPOH', 
-      created: '29-10-2024', 
-      lastActive: '2024-12-25 10:54:11', 
-      lastUpdate: '2025-09-10 17:25:38', 
-      device: 'iPhone SE 2025 (Marcus Reed)' 
-    },
-    { 
-      username: 'Isabelle Clark', 
-      email: 'belleclark@gmail.com', 
-      app: 'WHA', 
-      status: 'Active', 
-      position: 'Director', 
-      area: 'KL', 
-      created: '27-08-2024', 
-      lastActive: '2025-01-10 08:54:16', 
-      lastUpdate: '2025-09-23 11:44:11', 
-      device: 'Samsung Z Fold6 (Isabelle Clark)' 
-    },
-    { 
-      username: 'Lucas Mitchell', 
-      email: 'lucasmitch@gmail.com', 
-      app: 'MNGA', 
-      status: 'Active', 
-      position: 'CEO', 
-      area: 'KL', 
-      created: '14-03-2024', 
-      lastActive: '2025-09-24 07:40:11', 
-      lastUpdate: '2025-08-04 15:21:09', 
-      device: 'Google Pixel 9 Pro (Lucas Mitchell)' 
-    },
-  ];
 
   const handleEdit = (username) => {
     console.log('Edit user:', username);
@@ -119,18 +45,117 @@ const UserAccountManagement = () => {
   const handleCreateUser = () => {
     setShowCreateModal(true);
   };
-
-  const filteredUsers = users.filter(user => {
+  
+  const filteredUsers = allUsers
+  .filter(user => {
     if (activeTab === 'all') return true;
-    if (activeTab === 'warehouse') return user.app === 'WHA';
-    if (activeTab === 'management') return user.app === 'MNGA';
-    if (activeTab === 'salesman') return user.app === 'SMA';
-    return true;
-  }).filter(user => 
-    user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.position.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    return user.app === activeTab;
+  })
+  .filter(user => {
+    const search = searchTerm.toLowerCase();
+    return (
+      user.username.toLowerCase().includes(search) ||
+      user.userEmail.toLowerCase().includes(search) ||
+      user.jobPosition.toLowerCase().includes(search)
+    );
+  });
+
+  useEffect(() => {
+    const fetchStatsAndApps = async () => {
+      try {
+        const [appsResponse, usageResponse] = await Promise.all([
+          ApiService.getApplication(),
+          ApiService.getUserCountAndEmailsByApplication()
+        ]);
+
+        // Save app list
+        setAppList(appsResponse);
+
+        // Build lookup table for usage stats by applicationName
+        const usageMap = {};
+        let totalEmailAccounts = 0;
+        let totalUserCount = 0;
+
+        usageResponse.forEach(entry => {
+          const name = entry.applicationName;
+          const emailCount = entry.numberOfEmailAccounts || 0;
+          const userCount = entry.userCount || 0;
+          const percentage = emailCount > 0 ? Math.round((userCount / emailCount) * 100) : 0;
+
+          usageMap[name] = {
+            active: userCount,
+            total: emailCount,
+            percentage
+          };
+
+          totalEmailAccounts += emailCount;
+          totalUserCount += userCount;
+        });
+
+        usageMap['All Applications'] = {
+          active: totalUserCount,
+          total: totalEmailAccounts,
+          percentage: totalEmailAccounts > 0
+            ? Math.round((totalUserCount / totalEmailAccounts) * 100)
+            : 0
+        };
+
+        setUsageStats(usageMap);
+      } catch (error) {
+        console.error('Error fetching applications or stats:', error);
+      }
+    };
+
+    fetchStatsAndApps();
+  }, []);
+
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setLoadingUsers(true);
+      try {
+        const response = await ApiService.getUserAccountList({
+          pageNumber: currentPage,
+          pageSize: rowsPerPage
+        });
+
+        const flattenedUsers = response.data.flatMap(app =>
+          app.users.map(user => ({
+            ...user,
+            app: app.applicationCode,
+            appName: app.applicationName
+          }))
+        );
+
+        //setUsers(flattenedUsers);
+        setAllUsers(flattenedUsers); // ✅ ADD THIS LINE
+
+        setTotalPages(response.totalPages);
+        setTotalCount(response.totalCount);
+      } catch (error) {
+        console.error('Failed to fetch users:', error);
+      } finally {
+        setLoadingUsers(false);
+      }
+    };
+
+    fetchUsers();
+  }, [currentPage, rowsPerPage]);
+
+  useEffect(() => {
+    const fetchApplications = async () => {
+      try {
+        const response = await ApiService.getApplication();
+        setFetchedApps(response); // [{applicationCode, applicationName, ...}]
+      } catch (error) {
+        console.error('Failed to fetch applications:', error);
+      } finally {
+        setLoadingApps(false);
+      }
+    };
+
+    fetchApplications();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -156,26 +181,44 @@ const UserAccountManagement = () => {
 
           {/* Statistics Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
-            {Object.entries(userStats).map(([key, value]) => {
-              const colors = {
-                all: { chart: 'text-red-500', bg: 'bg-red-50', border: 'border-red-500' },
-                warehouse: { chart: 'text-green-500', bg: 'bg-green-50', border: 'border-green-500' },
-                salesman: { chart: 'text-blue-500', bg: 'bg-blue-50', border: 'border-blue-500' },
-                management: { chart: 'text-yellow-500', bg: 'bg-yellow-50', border: 'border-yellow-500' }
+            {/* "All Applications" Card */}
+            {usageStats['All Applications'] && (
+              <div className="bg-red-50 rounded-xl shadow-sm p-4 lg:p-6 border border-red-500">
+                <h3 className="text-gray-600 text-sm mb-4">All Applications</h3>
+                <div className="flex items-center gap-4">
+                  <div className="w-16 lg:w-20 h-16 lg:h-20 rounded-full border-4 border-red-500 flex items-center justify-center text-red-500">
+                    <span className="text-sm font-bold">{usageStats['All Applications'].percentage}%</span>
+                  </div>
+                  <div>
+                    <p className="text-2xl lg:text-3xl font-bold text-gray-800">
+                      {usageStats['All Applications'].active} / {usageStats['All Applications'].total}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Dynamic cards based on application list */}
+            {appList.map(app => {
+              const stat = usageStats[app.applicationName] || {
+                active: 0,
+                total: 0,
+                percentage: 0
               };
-              
+
               return (
-                <div key={key} className={`${colors[key].bg} rounded-xl shadow-sm p-4 lg:p-6 border border-gray-100`}>
-                  <h3 className="text-gray-600 text-sm mb-4 capitalize">
-                    {key === 'all' ? 'All' : key.charAt(0).toUpperCase() + key.slice(1)} Application
-                  </h3>
+                <div
+                  key={app.applicationCode}
+                  className="bg-gray-100 rounded-xl shadow-sm p-4 lg:p-6 border border-gray-200"
+                >
+                  <h3 className="text-gray-600 text-sm mb-4">{app.applicationName}</h3>
                   <div className="flex items-center gap-4">
-                    <div className={`w-16 lg:w-20 h-16 lg:h-20 rounded-full border-4 ${colors[key].border} flex items-center justify-center ${colors[key].chart}`}>
-                      <span className="text-sm font-bold">{value.percentage}%</span>
+                    <div className="w-16 lg:w-20 h-16 lg:h-20 rounded-full border-4 border-gray-400 flex items-center justify-center text-gray-700">
+                      <span className="text-sm font-bold">{stat.percentage}%</span>
                     </div>
                     <div>
                       <p className="text-2xl lg:text-3xl font-bold text-gray-800">
-                        {value.active} / {value.total}
+                        {stat.active} / {stat.total}
                       </p>
                     </div>
                   </div>
@@ -188,7 +231,35 @@ const UserAccountManagement = () => {
           <div className="bg-white rounded-xl shadow-sm border border-gray-100">
             {/* Filter and Search Bar */}
             <div className="p-4 border-b border-gray-200 flex flex-wrap gap-4 items-center justify-between">
+              {/* Tabs from API */}
               <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => setActiveTab('all')}
+                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                    activeTab === 'all'
+                      ? 'bg-gray-800 text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <span>📱</span> All Applications
+                </button>
+
+                {!loadingApps &&
+                  fetchedApps.map((app) => (
+                    <button
+                      key={app.applicationCode}
+                      onClick={() => setActiveTab(app.applicationCode)}
+                      className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+                        activeTab === app.applicationCode
+                          ? 'bg-gray-800 text-white'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      <span>📦</span> {app.applicationName}
+                    </button>
+                  ))}
+              </div>
+              {/* <div className="flex gap-2 flex-wrap">
                 <button 
                   onClick={() => setActiveTab('all')}
                   className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
@@ -221,7 +292,7 @@ const UserAccountManagement = () => {
                 >
                   <span>👤</span> Salesman App
                 </button>
-              </div>
+              </div> */}
               
               <div className="flex gap-2">
                 <div className="relative">
@@ -266,8 +337,8 @@ const UserAccountManagement = () => {
                   {filteredUsers.slice(0, rowsPerPage).map((user, index) => (
                     <tr key={index} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 text-sm text-gray-800 font-medium">{user.username}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.email}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.app}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{user.userEmail}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{user.appName}</td>
                       <td className="px-6 py-4">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
                           user.status === 'Active' 
@@ -277,12 +348,20 @@ const UserAccountManagement = () => {
                           {user.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.position}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">{user.jobPosition}</td>
                       <td className="px-6 py-4 text-sm text-gray-600">{user.area}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.created}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.lastActive}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.lastUpdate}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.device}</td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {user.createDate ? new Date(user.createDate).toLocaleDateString() : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {user.lastActive ? new Date(user.lastActive).toLocaleString() : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {user.lastUpdate ? new Date(user.lastUpdate).toLocaleString() : '-'}
+                      </td>
+                      <td className="px-6 py-4 text-sm text-gray-600">
+                        {user.lastDeviceUsed || '-'}
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex gap-2">
                           <button 
@@ -304,6 +383,13 @@ const UserAccountManagement = () => {
                     </tr>
                   ))}
                 </tbody>
+                {loadingUsers ? (
+                  <div className="p-6 text-center text-gray-500">Loading users...</div>
+                ) : (
+                  <table className="w-full">
+                    {/* ...table structure... */}
+                  </table>
+                )}
               </table>
             </div>
 
@@ -313,26 +399,52 @@ const UserAccountManagement = () => {
                 <span>Rows per page:</span>
                 <select 
                   value={rowsPerPage}
-                  onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                  onChange={(e) => {
+                    setRowsPerPage(Number(e.target.value));
+                    setCurrentPage(1); // Reset to first page on page size change
+                  }}
                   className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value={7}>7</option>
+                  <option value={7}>5</option>
                   <option value={10}>10</option>
                   <option value={20}>20</option>
                   <option value={50}>50</option>
                 </select>
-                <span className="ml-4">of {filteredUsers.length} rows</span>
+                <span className="ml-4">
+                  {`Page ${currentPage} of ${totalPages}`} — {totalCount} total users
+                </span>
               </div>
+
               <div className="flex items-center gap-2">
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 transition-colors">«</button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 transition-colors">‹</button>
-                <button className="px-3 py-1 bg-gray-800 text-white rounded">1</button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 transition-colors">2</button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 transition-colors">3</button>
-                <span className="px-2">...</span>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 transition-colors">10</button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 transition-colors">›</button>
-                <button className="px-3 py-1 border border-gray-300 rounded hover:bg-gray-50 transition-colors">»</button>
+                <button
+                  onClick={() => setCurrentPage(1)}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  «
+                </button>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  ‹
+                </button>
+                <span className="px-3 py-1">{currentPage}</span>
+                <button
+                  onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  ›
+                </button>
+                <button
+                  onClick={() => setCurrentPage(totalPages)}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1 border rounded hover:bg-gray-50 disabled:opacity-50"
+                >
+                  »
+                </button>
               </div>
             </div>
           </div>
