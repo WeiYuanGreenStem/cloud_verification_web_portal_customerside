@@ -338,6 +338,7 @@ class ApiService {
     return localStorage.getItem('authToken');
   }
 
+  // ===== USER ACCOUNT MANAGEMENT METHODS =====
   async getApplication() {
     // Retrieve token from local storage
     const token = localStorage.getItem('authToken');

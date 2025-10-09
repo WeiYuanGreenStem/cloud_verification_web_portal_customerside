@@ -3,12 +3,18 @@ import { Search, Edit2, Trash2, Plus } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import ApiService from '../services/api';
+import UserStatsWidget from '../components/UserAccountStatisticWidget';
+import ApplicationTabs from '../components/ApplicationTab'; // Adjust path if needed
+
 
 const UserAccountManagement = () => {
   //Tab variables
   const [activeTab, setActiveTab] = useState('all');
   const [fetchedApps, setFetchedApps] = useState([]);
   const [loadingApps, setLoadingApps] = useState(true);
+  const [applicationCodesToShow, setApplicationCodesToShow] = useState([]);
+  const [expandedParent, setExpandedParent] = useState(null);
+
 
   //User table variables
   const [allUsers, setAllUsers] = useState([]); // Flattened list of users
@@ -23,7 +29,6 @@ const UserAccountManagement = () => {
   //Number User Widget variables
   const [appList, setAppList] = useState([]);
   const [usageStats, setUsageStats] = useState({});
-
 
   //
   const [searchTerm, setSearchTerm] = useState('');
@@ -46,7 +51,9 @@ const UserAccountManagement = () => {
     setShowCreateModal(true);
   };
   
-  const filteredUsers = allUsers
+  const filteredUsers = applicationCodesToShow.length === 0
+    ? allUsers
+    : allUsers.filter(u => applicationCodesToShow.includes(u.applicationCode))
   .filter(user => {
     if (activeTab === 'all') return true;
     return user.app === activeTab;
@@ -60,6 +67,31 @@ const UserAccountManagement = () => {
     );
   });
 
+  // Update applicationCodesToShow when activeTab or fetchedApps change
+  useEffect(() => {
+    if (activeTab === 'all') {
+      setApplicationCodesToShow([]);
+      setExpandedParent(null); // collapse dropdown
+      return;
+    }
+
+    const result = [activeTab];
+    let foundParent = null;
+
+    fetchedApps.forEach((app) => {
+      if (app.parentApplicationCode === activeTab) {
+        result.push(app.applicationCode);
+      }
+      if (app.applicationCode === activeTab && app.parentApplicationCode) {
+        foundParent = app.parentApplicationCode;
+      }
+    });
+
+    setApplicationCodesToShow(result);
+    setExpandedParent(foundParent); // expand the parent if child is active
+  }, [activeTab, fetchedApps]);
+
+  // Fetch applications and usage stats on mount
   useEffect(() => {
     const fetchStatsAndApps = async () => {
       try {
@@ -109,7 +141,7 @@ const UserAccountManagement = () => {
     fetchStatsAndApps();
   }, []);
 
-
+  // Fetch users when page or rowsPerPage changes
   useEffect(() => {
     const fetchUsers = async () => {
       setLoadingUsers(true);
@@ -141,7 +173,8 @@ const UserAccountManagement = () => {
 
     fetchUsers();
   }, [currentPage, rowsPerPage]);
-
+  
+  // Fetch applications for tabs on mount
   useEffect(() => {
     const fetchApplications = async () => {
       try {
@@ -180,124 +213,25 @@ const UserAccountManagement = () => {
           </div>
 
           {/* Statistics Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-6 lg:mb-8">
-            {/* "All Applications" Card */}
-            {usageStats['All Applications'] && (
-              <div className="bg-red-50 rounded-xl shadow-sm p-4 lg:p-6 border border-red-500">
-                <h3 className="text-gray-600 text-sm mb-4">All Applications</h3>
-                <div className="flex items-center gap-4">
-                  <div className="w-16 lg:w-20 h-16 lg:h-20 rounded-full border-4 border-red-500 flex items-center justify-center text-red-500">
-                    <span className="text-sm font-bold">{usageStats['All Applications'].percentage}%</span>
-                  </div>
-                  <div>
-                    <p className="text-2xl lg:text-3xl font-bold text-gray-800">
-                      {usageStats['All Applications'].active} / {usageStats['All Applications'].total}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Dynamic cards based on application list */}
-            {appList.map(app => {
-              const stat = usageStats[app.applicationName] || {
-                active: 0,
-                total: 0,
-                percentage: 0
-              };
-
-              return (
-                <div
-                  key={app.applicationCode}
-                  className="bg-gray-100 rounded-xl shadow-sm p-4 lg:p-6 border border-gray-200"
-                >
-                  <h3 className="text-gray-600 text-sm mb-4">{app.applicationName}</h3>
-                  <div className="flex items-center gap-4">
-                    <div className="w-16 lg:w-20 h-16 lg:h-20 rounded-full border-4 border-gray-400 flex items-center justify-center text-gray-700">
-                      <span className="text-sm font-bold">{stat.percentage}%</span>
-                    </div>
-                    <div>
-                      <p className="text-2xl lg:text-3xl font-bold text-gray-800">
-                        {stat.active} / {stat.total}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <UserStatsWidget usageStats={usageStats} appList={appList} />
 
           {/* Table Section */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100">
             {/* Filter and Search Bar */}
-            <div className="p-4 border-b border-gray-200 flex flex-wrap gap-4 items-center justify-between">
-              {/* Tabs from API */}
-              <div className="flex gap-2 flex-wrap">
-                <button
-                  onClick={() => setActiveTab('all')}
-                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                    activeTab === 'all'
-                      ? 'bg-gray-800 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <span>📱</span> All Applications
-                </button>
-
-                {!loadingApps &&
-                  fetchedApps.map((app) => (
-                    <button
-                      key={app.applicationCode}
-                      onClick={() => setActiveTab(app.applicationCode)}
-                      className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                        activeTab === app.applicationCode
-                          ? 'bg-gray-800 text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      <span>📦</span> {app.applicationName}
-                    </button>
-                  ))}
-              </div>
-              {/* <div className="flex gap-2 flex-wrap">
-                <button 
-                  onClick={() => setActiveTab('all')}
-                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                    activeTab === 'all' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <span>📱</span> All Application
-                </button>
-                <button 
-                  onClick={() => setActiveTab('warehouse')}
-                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                    activeTab === 'warehouse' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <span>🏠</span> Warehouse App
-                </button>
-                <button 
-                  onClick={() => setActiveTab('management')}
-                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                    activeTab === 'management' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <span>💼</span> Management App
-                </button>
-                <button 
-                  onClick={() => setActiveTab('salesman')}
-                  className={`px-4 py-2 rounded-lg flex items-center gap-2 transition-colors ${
-                    activeTab === 'salesman' ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <span>👤</span> Salesman App
-                </button>
-              </div> */}
-              
-              <div className="flex gap-2">
+            <div className="p-4 border-b border-gray-200 flex flex-wrap items-center justify-between">
+              <ApplicationTabs
+                apps={fetchedApps}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                loading={loadingApps}
+                expandedParent={expandedParent}
+                setExpandedParent={setExpandedParent}
+              />
+              {/* Right-side Controls */}
+              <div className="flex gap-2 mt-4 sm:mt-0">
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                  <input 
+                  <input
                     type="text"
                     placeholder="Search"
                     value={searchTerm}
@@ -305,7 +239,7 @@ const UserAccountManagement = () => {
                     className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
                   />
                 </div>
-                <button 
+                <button
                   onClick={handleCreateUser}
                   className="px-4 py-2 bg-gray-800 text-white rounded-lg flex items-center gap-2 hover:bg-gray-700 transition-colors"
                 >
@@ -314,7 +248,6 @@ const UserAccountManagement = () => {
                 </button>
               </div>
             </div>
-
             {/* Table - keeping your existing table structure */}
             <div className="overflow-x-auto">
               <table className="w-full">
