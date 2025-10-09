@@ -31,9 +31,7 @@ const Header = ({ toggleSidebar, title, subtitle }) => {
 
   const handleSettingsClick = () => {
     setShowProfileMenu(false);
-    // Navigate to settings page when implemented
-    // navigate('/settings');
-    console.log('Navigate to settings page');
+    navigate('/settings');
   };
 
   const handleLogoutConfirm = async () => {
@@ -61,6 +59,7 @@ const Header = ({ toggleSidebar, title, subtitle }) => {
   const handleLogoutCancel = () => {
     setShowLogoutModal(false);
   };
+
 
   return (
     <>

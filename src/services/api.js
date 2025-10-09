@@ -148,37 +148,32 @@ class ApiService {
       Password: password,
     });
 
-    // If login is successful, store the token and user data
-    if (result.success && result.status === 200) {
-      const responseData = result.data;
-      
-      // Handle array response (your API returns an array)
-      if (Array.isArray(responseData) && responseData.length > 0) {
-        const loginData = responseData[0]; // Get first element from array
-        
-        // Store the authentication token - your API uses 'jwtToken'
-        if (loginData?.jwtToken) {
-          localStorage.setItem('authToken', loginData.jwtToken);
-        }
-        
-        // Store customer data
-        const customerData = {
-          customerCode: loginData.customerCode,
-          customerName: loginData.customerName,
-          email: email, // Add email for header display
-          customers: [
-            {
-              customerCode: loginData.customerCode,
-              customerName: loginData.customerName
-            }
-          ]
-        };
-        
-        localStorage.setItem('customerData', JSON.stringify(customerData));
-      }
-    }
-
+    // Return the result without automatically storing data
+    // Let the component handle multiple customers scenario
     return result;
+  }
+
+  // New method to select and store customer data
+  selectCustomer(customerData, email) {
+    // Store the authentication token
+    if (customerData?.jwtToken) {
+      localStorage.setItem('authToken', customerData.jwtToken);
+    }
+    
+    // Store customer data
+    const userData = {
+      customerCode: customerData.customerCode,
+      customerName: customerData.customerName,
+      email: email,
+      customers: [
+        {
+          customerCode: customerData.customerCode,
+          customerName: customerData.customerName
+        }
+      ]
+    };
+    
+    localStorage.setItem('customerData', JSON.stringify(userData));
   }
 
   // Send OTP for forgot password
@@ -405,6 +400,83 @@ class ApiService {
       // Optionally throw or handle the error here
       throw new Error(result.error);
     }
+  }
+
+  // ===== PROFILE SETTINGS METHODS =====
+  
+  // Get encrypted customer profile
+  async getEncryptedProfile() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('GET', '/api/ProfileSettings/encrypted-profile');
+  }
+
+  // Get customer profile (non-encrypted)
+  async getProfile() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('GET', '/api/ProfileSettings/profile');
+  }
+
+  // Update customer profile
+  async updateProfile(updateData) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('PUT', '/api/ProfileSettings/update-profile', updateData);
+  }
+
+  // Get profile summary
+  async getProfileSummary() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('GET', '/api/ProfileSettings/profile-summary');
+  }
+
+  // Validate profile data
+  async validateProfile(updateData) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('POST', '/api/ProfileSettings/validate-profile', updateData);
   }
 }
 

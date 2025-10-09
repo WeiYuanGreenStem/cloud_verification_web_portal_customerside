@@ -5,6 +5,7 @@ import Home from './pages/Home';
 import DeviceLicenseKeyManagement from './pages/DeviceLicenseKeyManagement';
 import UserAccountManagement from './pages/UserAccountManagement';
 import ForgotPassword from './pages/ForgotPassword';
+import Settings from './pages/Settings'; 
 import ProtectedRoute from './components/ProtectedRoute';
 import PublicRoute from './components/PublicRoute';
 
@@ -58,6 +59,14 @@ const App = () => {
           element={
             <ProtectedRoute>
               <UserAccountManagement />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/settings" 
+          element={
+            <ProtectedRoute>
+              <Settings />
             </ProtectedRoute>
           } 
         />
