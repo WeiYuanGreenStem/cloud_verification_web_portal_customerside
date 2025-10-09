@@ -12,7 +12,11 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle,
-  Lock
+  Lock,
+  Unlock,
+  KeyRound,
+  X,
+  Clock
 } from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
@@ -32,6 +36,24 @@ const Settings = () => {
   const [encryptedProfile, setEncryptedProfile] = useState(null);
   const [showDatabasePassword, setShowDatabasePassword] = useState(false);
 
+  // Re-authentication states
+  const [showReAuthModal, setShowReAuthModal] = useState(false);
+  const [reAuthEmail, setReAuthEmail] = useState('');
+  const [reAuthPassword, setReAuthPassword] = useState('');
+  const [isReAuthenticating, setIsReAuthenticating] = useState(false);
+  const [reAuthError, setReAuthError] = useState('');
+  const [tempAccessToken, setTempAccessToken] = useState('');
+  const [secureDatabaseConnection, setSecureDatabaseConnection] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authenticationExpiry, setAuthenticationExpiry] = useState(null);
+
+  // Access denied notification states
+  const [showAccessDenied, setShowAccessDenied] = useState(false);
+  const [accessDeniedMessage, setAccessDeniedMessage] = useState('');
+
+  // Session expired notification states
+  const [showSessionExpired, setShowSessionExpired] = useState(false);
+
   // Form data states
   const [formData, setFormData] = useState({
     customerName: '',
@@ -50,6 +72,25 @@ const Settings = () => {
     fetchProfileData();
   }, [navigate]);
 
+  // Check if re-authentication has expired
+  useEffect(() => {
+    const checkAuthExpiry = () => {
+      if (authenticationExpiry && new Date() > authenticationExpiry) {
+        console.log('Database access session expired');
+        setIsAuthenticated(false);
+        setTempAccessToken('');
+        setSecureDatabaseConnection(null);
+        setAuthenticationExpiry(null);
+        
+        // No notification - just silently lock access
+        // User will see lock icon again
+      }
+    };
+
+    const interval = setInterval(checkAuthExpiry, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [authenticationExpiry, activeTab]);
+
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
@@ -67,15 +108,12 @@ const Settings = () => {
         ApiService.getEncryptedProfile()
       ]);
 
-      console.log('Profile Result:', profileResult);
       console.log('Encrypted Result:', encryptedResult);
 
       // Handle regular profile data
       if (profileResult.success) {
-        // Check if the response data has success property (your API structure)
         if (profileResult.data?.success === true) {
           const profile = profileResult.data.data;
-          console.log('Profile data:', profile);
           setProfileData(profile);
           
           // Initialize form data
@@ -86,6 +124,9 @@ const Settings = () => {
             customerPhone: profile.customerPhone || '',
             contactPerson: profile.contactPerson || '',
           });
+
+          // Set email for re-authentication
+          setReAuthEmail(profile.customerEmail || '');
         } else {
           const errorMessage = profileResult.data?.message || 'Failed to fetch profile data';
           console.log('Profile API error:', errorMessage);
@@ -113,7 +154,6 @@ const Settings = () => {
           console.log('Encrypted profile API error:', encryptedResult.data?.message);
         }
       } else if (encryptedResult.status === 401 || encryptedResult.isAuthError) {
-        // Handle auth error for encrypted profile
         console.log('Encrypted profile auth error');
       } else {
         console.log('Encrypted profile request failed:', encryptedResult.error);
@@ -178,6 +218,104 @@ const Settings = () => {
     }
   };
 
+  const handleDatabaseTabClick = () => {
+    if (!isAuthenticated) {
+      setShowReAuthModal(true);
+    } else {
+      setActiveTab('database');
+    }
+  };
+
+  const handleReAuthentication = async (e) => {
+    e.preventDefault();
+    setIsReAuthenticating(true);
+    setReAuthError('');
+
+    try {
+      const result = await ApiService.reAuthenticate(reAuthEmail, reAuthPassword);
+      
+      if (result.success && result.data?.success === true) {
+        const authData = result.data.data;
+        
+        if (authData.isAuthenticated) {
+          setTempAccessToken(authData.tempAccessToken || '');
+          setIsAuthenticated(true);
+          
+          // Set expiry time (assume 15 minutes from backend)
+          const expiryTime = new Date();
+          expiryTime.setMinutes(expiryTime.getMinutes() + 15);
+          setAuthenticationExpiry(expiryTime);
+          
+          setShowReAuthModal(false);
+          setActiveTab('database');
+          setReAuthPassword('');
+          setReAuthError(''); // Clear any previous errors
+          
+          // Fetch secure database connection
+          await fetchSecureDatabaseConnection(authData.tempAccessToken);
+        } else {
+          // Show error in modal instead of access denied notification
+          setReAuthError(authData.message || 'Invalid credentials. Please check your password and try again.');
+        }
+      } else {
+        // Check if this is a re-authentication error (not a session expiry)
+        if (result.isReAuthError) {
+          // This is a wrong password scenario - show error in modal
+          setReAuthError(result.error || 'Invalid credentials. Please check your password and try again.');
+        } else if (result.isAuthError && result.status === 401) {
+          // This is a main session expiry - redirect to login
+          setError('Your session has expired. Please log in again.');
+          setTimeout(() => {
+            navigate('/login', { replace: true });
+          }, 2000);
+        } else {
+          // Other errors - show in modal
+          setReAuthError(result.error || 'An unexpected error occurred during authentication verification. Please try again.');
+        }
+      }
+    } catch (error) {
+      console.error('Re-authentication error:', error);
+      setReAuthError('An unexpected error occurred during authentication verification. Please try again.');
+    } finally {
+      setIsReAuthenticating(false);
+      // Don't close modal on error - let user try again
+    }
+  };
+
+  const fetchSecureDatabaseConnection = async (token) => {
+    try {
+      const result = await ApiService.getSecureDatabaseConnection(token);
+      
+      if (result.success && result.data?.success === true) {
+        setSecureDatabaseConnection(result.data.data);
+      } else {
+        console.error('Failed to fetch secure database connection:', result.error);
+      }
+    } catch (error) {
+      console.error('Error fetching secure database connection:', error);
+    }
+  };
+
+  const handleCloseReAuthModal = () => {
+    setShowReAuthModal(false);
+    setReAuthError('');
+    setReAuthPassword('');
+  };
+
+  const handleCloseAccessDenied = () => {
+    setShowAccessDenied(false);
+    setAccessDeniedMessage('');
+  };
+
+  const handleCloseSessionExpired = () => {
+    setShowSessionExpired(false);
+  };
+
+  const handleSessionExpiredReAuth = () => {
+    setShowSessionExpired(false);
+    setShowReAuthModal(true);
+  };
+
   // Don't render content if not authenticated
   if (!ApiService.isAuthenticated()) {
     return null;
@@ -187,6 +325,109 @@ const Settings = () => {
     <div className="min-h-screen bg-gray-50 flex">
       <Sidebar isOpen={sidebarOpen} toggleSidebar={toggleSidebar} />
       
+      {/* Remove Access Denied Notification - we'll show errors in modal instead */}
+      
+      {/* Remove Session Expired Notification - silent expiry */}
+
+      {/* Re-Authentication Modal */}
+      {showReAuthModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="text-center mb-6">
+              <div className="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+                <Shield size={32} className="text-orange-600" />
+              </div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Security Verification</h2>
+              <p className="text-gray-600">
+                Please verify your identity to access sensitive database information
+              </p>
+            </div>
+
+            {reAuthError && (
+              <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg text-sm">
+                <div className="flex items-center gap-2 mb-1">
+                  <AlertCircle size={16} />
+                  <span className="font-medium">Authentication Failed</span>
+                </div>
+                <p>{reAuthError}</p>
+              </div>
+            )}
+
+            <form onSubmit={handleReAuthentication} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={reAuthEmail}
+                  onChange={(e) => setReAuthEmail(e.target.value)}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+                  required
+                  disabled={isReAuthenticating}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password
+                </label>
+                <input
+                  type="password"
+                  value={reAuthPassword}
+                  onChange={(e) => setReAuthPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className={`w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500 ${
+                    reAuthError ? 'border-red-300 bg-red-50' : 'border-gray-300'
+                  }`}
+                  required
+                  disabled={isReAuthenticating}
+                />
+              </div>
+
+              <div className="flex gap-3 mt-6">
+                <button
+                  type="button"
+                  onClick={handleCloseReAuthModal}
+                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  disabled={isReAuthenticating}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isReAuthenticating}
+                  className="flex-1 bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                >
+                  {isReAuthenticating ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <Unlock size={16} />
+                      Verify Access
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 text-blue-800 text-sm">
+                <KeyRound size={14} />
+                <span className="font-medium">Security Note</span>
+              </div>
+              <p className="text-blue-700 text-xs mt-1">
+                Access will expire after 15 minutes of inactivity for your security. 
+                {reAuthError && ' Please verify your credentials and try again.'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         <Header 
@@ -216,6 +457,19 @@ const Settings = () => {
             </div>
           )}
 
+          {/* Authentication Status Banner */}
+          {isAuthenticated && authenticationExpiry && (
+            <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+              <Unlock size={20} className="text-green-600" />
+              <div className="flex-1">
+                <span className="text-green-800 font-medium">Secure Access Granted</span>
+                <p className="text-green-700 text-sm mt-1">
+                  Access expires at {authenticationExpiry.toLocaleTimeString()}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Loading State */}
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -242,7 +496,7 @@ const Settings = () => {
                     </button>
                     
                     <button
-                      onClick={() => setActiveTab('database')}
+                      onClick={handleDatabaseTabClick}
                       className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-left transition-colors ${
                         activeTab === 'database' 
                           ? 'bg-green-50 text-green-600 border border-green-200' 
@@ -251,6 +505,9 @@ const Settings = () => {
                     >
                       <Database size={18} />
                       <span>Database Connection</span>
+                      {!isAuthenticated && (
+                        <Lock size={14} className="text-orange-500 ml-auto" />
+                      )}
                     </button>
 
                     <button
@@ -292,6 +549,7 @@ const Settings = () => {
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
                             disabled
                           />
+                          <p className="text-xs text-gray-500 mt-1">This field cannot be modified</p>
                         </div>
                         
                         <div>
@@ -302,9 +560,10 @@ const Settings = () => {
                             type="text"
                             name="customerName"
                             value={formData.customerName}
-                            onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                            disabled
                           />
+                          <p className="text-xs text-gray-500 mt-1">Contact support to modify this field</p>
                         </div>
                         
                         <div>
@@ -320,6 +579,7 @@ const Settings = () => {
                               {profileData.statusName || 'Unknown'}
                             </span>
                           </div>
+                          <p className="text-xs text-gray-500 mt-1">Contact support to change status</p>
                         </div>
                         
                         <div className="md:col-span-1">
@@ -330,9 +590,10 @@ const Settings = () => {
                             type="email"
                             name="customerEmail"
                             value={formData.customerEmail}
-                            onChange={handleInputChange}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                            disabled
                           />
+                          <p className="text-xs text-gray-500 mt-1">Contact support to modify this field</p>
                         </div>
                         
                         <div className="md:col-span-2">
@@ -342,10 +603,25 @@ const Settings = () => {
                           <textarea
                             name="customerAddress"
                             value={formData.customerAddress}
-                            onChange={handleInputChange}
                             rows={3}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                            disabled
                           />
+                          <p className="text-xs text-gray-500 mt-1">Contact support to modify this field</p>
+                        </div>
+                      </div>
+
+                      {/* Information Notice */}
+                      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertCircle size={16} className="text-blue-600 mt-0.5 flex-shrink-0" />
+                          <div className="text-blue-800">
+                            <p className="text-sm font-medium mb-1">Company Information</p>
+                            <p className="text-sm text-blue-700">
+                              Core company details (Name, Email, Address) are managed by administrators for security and consistency. 
+                              Contact support if you need to update these fields.
+                            </p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -353,7 +629,7 @@ const Settings = () => {
                 )}
 
                 {/* Database Connection Tab */}
-                {activeTab === 'database' && encryptedProfile && (
+                {activeTab === 'database' && (
                   <div className="bg-white rounded-lg shadow-sm border border-gray-200">
                     <div className="px-6 py-4 border-b border-gray-200">
                       <div className="flex items-center gap-2">
@@ -367,92 +643,130 @@ const Settings = () => {
                     </div>
                     
                     <div className="p-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Server
-                          </label>
-                          <input
-                            type="text"
-                            value={encryptedProfile.encryptedDatabaseConnection?.encryptedDatabaseServer || 'N/A'}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                            disabled
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Database
-                          </label>
-                          <input
-                            type="text"
-                            value={encryptedProfile.encryptedDatabaseConnection?.encryptedDatabaseName || 'N/A'}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                            disabled
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Username
-                          </label>
-                          <input
-                            type="text"
-                            value={encryptedProfile.encryptedDatabaseConnection?.encryptedDatabaseUsername || 'N/A'}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                            disabled
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Password
-                          </label>
-                          <div className="relative">
+                      {isAuthenticated && secureDatabaseConnection ? (
+                        // Show decrypted data
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Server
+                            </label>
                             <input
-                              type={showDatabasePassword ? 'text' : 'password'}
-                              value={encryptedProfile.encryptedDatabaseConnection?.maskedDatabasePassword || 'N/A'}
-                              className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                              type="text"
+                              value={secureDatabaseConnection.databaseServer || 'N/A'}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-800"
                               disabled
                             />
-                            <button
-                              type="button"
-                              onClick={() => setShowDatabasePassword(!showDatabasePassword)}
-                              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                            >
-                              {showDatabasePassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Database
+                            </label>
+                            <input
+                              type="text"
+                              value={secureDatabaseConnection.databaseName || 'N/A'}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-800"
+                              disabled
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Username
+                            </label>
+                            <input
+                              type="text"
+                              value={secureDatabaseConnection.databaseUsername || 'N/A'}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-800"
+                              disabled
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Password
+                            </label>
+                            <div className="relative">
+                              <input
+                                type={showDatabasePassword ? 'text' : 'password'}
+                                value={secureDatabaseConnection.databasePassword || 'N/A'}
+                                className="w-full px-3 py-2 pr-10 border border-gray-300 rounded-lg bg-gray-50 text-gray-800"
+                                disabled
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setShowDatabasePassword(!showDatabasePassword)}
+                                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                              >
+                                {showDatabasePassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Port
+                            </label>
+                            <input
+                              type="text"
+                              value={secureDatabaseConnection.databasePort || 'N/A'}
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-800"
+                              disabled
+                            />
                           </div>
                         </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Port
-                          </label>
-                          <input
-                            type="text"
-                            value={encryptedProfile.encryptedDatabaseConnection?.encryptedDatabasePort || 'N/A'}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                            disabled
-                          />
-                        </div>
-                      </div>
-                      
-                      {/* Encryption Notice */}
-                      <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <div className="flex items-center gap-2 text-blue-800">
-                          <Shield size={16} />
-                          <span className="text-sm font-medium">Security Information</span>
-                        </div>
-                        <p className="text-sm text-blue-700 mt-1">
-                          Database credentials are encrypted using AES-256-GCM encryption for maximum security.
-                        </p>
-                        {encryptedProfile.metadata && (
-                          <p className="text-xs text-blue-600 mt-2">
-                            Last updated: {new Date(encryptedProfile.metadata.lastUpdated).toLocaleString()}
+                      ) : !isAuthenticated && profileData ? (
+                        // Show message that authentication is required - no encrypted data shown
+                        <div className="text-center py-12">
+                          <div className="mx-auto w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mb-4">
+                            <Lock size={32} className="text-orange-600" />
+                          </div>
+                          <h3 className="text-lg font-medium text-gray-800 mb-2">Authentication Required</h3>
+                          <p className="text-gray-600 mb-6">
+                            Access to database connection details requires security verification.
                           </p>
-                        )}
-                      </div>
+                          <button
+                            onClick={() => setShowReAuthModal(true)}
+                            className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors flex items-center justify-center gap-2 mx-auto"
+                          >
+                            <Shield size={16} />
+                            Verify Identity
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-gray-500">
+                          No database connection information available.
+                        </div>
+                      )}
+                      
+                      {/* Security Notice */}
+                      {isAuthenticated ? (
+                        <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex items-center gap-2 text-green-800">
+                            <Shield size={16} />
+                            <span className="text-sm font-medium">Secure Access Active</span>
+                          </div>
+                          <p className="text-sm text-green-700 mt-1">
+                            You are viewing decrypted database credentials. Access will expire automatically for your security.
+                          </p>
+                          {authenticationExpiry && (
+                            <p className="text-xs text-green-600 mt-2">
+                              Session expires at: {authenticationExpiry.toLocaleTimeString()}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                          <div className="flex items-center gap-2 text-blue-800">
+                            <Shield size={16} />
+                            <span className="text-sm font-medium">Security Protection</span>
+                          </div>
+                          <p className="text-sm text-blue-700 mt-1">
+                            Database credentials are protected and require authentication to view. 
+                            Click "Verify Identity" to access sensitive information.
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -479,6 +793,7 @@ const Settings = () => {
                             value={formData.contactPerson}
                             onChange={handleInputChange}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            placeholder="Enter contact person name"
                           />
                         </div>
                         
@@ -492,37 +807,45 @@ const Settings = () => {
                             value={formData.customerPhone}
                             onChange={handleInputChange}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+                            placeholder="Enter phone number"
                           />
                         </div>
                       </div>
 
                       {/* Save Button */}
-                      <div className="mt-8 flex justify-end gap-4">
-                        <button
-                          onClick={fetchProfileData}
-                          className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
-                        >
-                          <RefreshCw size={16} />
-                          Refresh
-                        </button>
-                        
-                        <button
-                          onClick={handleSaveProfile}
-                          disabled={isSaving}
-                          className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                        >
-                          {isSaving ? (
-                            <>
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                              Saving...
-                            </>
-                          ) : (
-                            <>
-                              <Save size={16} />
-                              Save Changes
-                            </>
-                          )}
-                        </button>
+                      <div className="mt-8 flex justify-between items-center">
+                        <div className="text-sm text-gray-600">
+                          <p>Only contact person and phone number can be modified here.</p>
+                          <p className="text-xs text-gray-500 mt-1">For other changes, please contact system administrator.</p>
+                        </div>
+
+                        <div className="flex gap-4">
+                          <button
+                            onClick={fetchProfileData}
+                            className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center gap-2"
+                          >
+                            <RefreshCw size={16} />
+                            Refresh
+                          </button>
+                          
+                          <button
+                            onClick={handleSaveProfile}
+                            disabled={isSaving}
+                            className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                          >
+                            {isSaving ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                                Saving...
+                              </>
+                            ) : (
+                              <>
+                                <Save size={16} />
+                                Save Changes
+                              </>
+                            )}
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>

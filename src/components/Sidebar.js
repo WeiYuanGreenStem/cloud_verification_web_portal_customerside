@@ -86,7 +86,7 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             }`}
           >
             <Key size={20} />
-            <span>License Key</span>
+            <span>Device License Key</span>
           </button>
           
           <button 
@@ -101,17 +101,6 @@ const Sidebar = ({ isOpen, toggleSidebar }) => {
             <span>User Account</span>
           </button>
         </nav>
-        
-        {/* Footer */}
-        <div className="p-4 border-t border-gray-200">
-          <button 
-            onClick={() => handleNavigation('/login')}
-            className="w-full flex items-center space-x-3 px-4 py-3 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
-          >
-            <LogOut size={20} />
-            <span>Log out</span>
-          </button>
-        </div>
       </div>
     </>
   );

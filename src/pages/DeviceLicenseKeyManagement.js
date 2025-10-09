@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef} from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Edit2, Trash2, RefreshCw, AlertCircle } from 'lucide-react';
+import { Search, Edit2, Trash2, RefreshCw, AlertCircle, Smartphone, Warehouse, Users, Briefcase, TrendingUp} from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import ApiService from '../services/api';
@@ -175,11 +175,12 @@ const DeviceLicenseKeyManagement = () => {
                   key.applicationName?.toLowerCase().includes('sma');
     }
     
-    // Filter by search term
+    // Filter by search term (now includes currentUsedBy)
     const searchFilter = !searchTerm || 
       key.deviceLicenseKey?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       key.deviceInformation?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      key.applicationName?.toLowerCase().includes(searchTerm.toLowerCase());
+      key.applicationName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      key.currentUsedBy?.toLowerCase().includes(searchTerm.toLowerCase());
     
     return appFilter && searchFilter;
   });
@@ -324,26 +325,66 @@ const DeviceLicenseKeyManagement = () => {
             </div>
           ) : (
             <>
-              {/* Statistics Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <div className="bg-white rounded-xl shadow-sm p-6 text-center border border-gray-100">
-                  <h3 className="text-gray-600 text-sm mb-2">All Application</h3>
-                  <p className="text-5xl font-bold text-gray-800">{appStats.all}</p>
+               {/* Statistics Cards */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                {/* All Applications Card */}
+                <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 text-white relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-white bg-opacity-10 rounded-full -mr-10 -mt-10 transition-transform duration-300 group-hover:scale-110"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="p-3 bg-white bg-opacity-20 rounded-lg">
+                        <Smartphone size={24} className="text-white" />
+                      </div>
+                    </div>
+                    <h3 className="text-white text-opacity-90 text-sm font-medium mb-2">All Applications</h3>
+                    <p className="text-4xl lg:text-5xl font-bold text-white mb-1">{appStats.all}</p>
+                    <p className="text-white text-opacity-70 text-xs">License Keys</p>
+                  </div>
                 </div>
-                
-                <div className="bg-white rounded-xl shadow-sm p-6 text-center border border-gray-100">
-                  <h3 className="text-gray-600 text-sm mb-2">Warehouse Application</h3>
-                  <p className="text-5xl font-bold text-gray-800">{appStats.warehouse}</p>
+
+                {/* Warehouse Application Card */}
+                <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 text-white relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-white bg-opacity-10 rounded-full -mr-10 -mt-10 transition-transform duration-300 group-hover:scale-110"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="p-3 bg-white bg-opacity-20 rounded-lg">
+                        <Warehouse size={24} className="text-white" />
+                      </div>
+                    </div>
+                    <h3 className="text-white text-opacity-90 text-sm font-medium mb-2">Warehouse Apps</h3>
+                    <p className="text-4xl lg:text-5xl font-bold text-white mb-1">{appStats.warehouse}</p>
+                    <p className="text-white text-opacity-70 text-xs">License Keys</p>
+                  </div>
                 </div>
-                
-                <div className="bg-white rounded-xl shadow-sm p-6 text-center border border-gray-100">
-                  <h3 className="text-gray-600 text-sm mb-2">Salesman Application</h3>
-                  <p className="text-5xl font-bold text-gray-800">{appStats.salesman}</p>
+
+                {/* Salesman Application Card */}
+                <div className="bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 text-white relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-white bg-opacity-10 rounded-full -mr-10 -mt-10 transition-transform duration-300 group-hover:scale-110"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="p-3 bg-white bg-opacity-20 rounded-lg">
+                        <Users size={24} className="text-white" />
+                      </div>
+                    </div>
+                    <h3 className="text-white text-opacity-90 text-sm font-medium mb-2">Salesman Apps</h3>
+                    <p className="text-4xl lg:text-5xl font-bold text-white mb-1">{appStats.salesman}</p>
+                    <p className="text-white text-opacity-70 text-xs">License Keys</p>
+                  </div>
                 </div>
-                
-                <div className="bg-white rounded-xl shadow-sm p-6 text-center border border-gray-100">
-                  <h3 className="text-gray-600 text-sm mb-2">Management Application</h3>
-                  <p className="text-5xl font-bold text-gray-800">{appStats.management}</p>
+
+                {/* Management Application Card */}
+                <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 text-white relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-20 h-20 bg-white bg-opacity-10 rounded-full -mr-10 -mt-10 transition-transform duration-300 group-hover:scale-110"></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="p-3 bg-white bg-opacity-20 rounded-lg">
+                        <Briefcase size={24} className="text-white" />
+                      </div>
+                    </div>
+                    <h3 className="text-white text-opacity-90 text-sm font-medium mb-2">Management Apps</h3>
+                    <p className="text-4xl lg:text-5xl font-bold text-white mb-1">{appStats.management}</p>
+                    <p className="text-white text-opacity-70 text-xs">License Keys</p>
+                  </div>
                 </div>
               </div>
 
@@ -409,6 +450,7 @@ const DeviceLicenseKeyManagement = () => {
                         <th className="px-6 py-3 text-left text-sm font-medium">Create Date</th>
                         <th className="px-6 py-3 text-left text-sm font-medium">Last Used</th>
                         <th className="px-6 py-3 text-left text-sm font-medium">Last Update</th>
+                        <th className="px-6 py-3 text-left text-sm font-medium">Current Used By</th>
                         <th className="px-6 py-3 text-left text-sm font-medium">Device Information</th>
                         <th className="px-6 py-3 text-left text-sm font-medium">Actions</th>
                       </tr>
@@ -416,7 +458,7 @@ const DeviceLicenseKeyManagement = () => {
                     <tbody className="divide-y divide-gray-200">
                       {currentKeys.length === 0 ? (
                         <tr>
-                          <td colSpan="8" className="px-6 py-8 text-center text-gray-500">
+                          <td colSpan="9" className="px-6 py-8 text-center text-gray-500">
                             {filteredKeys.length === 0 && !isLoading ? 
                               'No device license keys found' : 
                               'No results match your search criteria'
@@ -453,6 +495,21 @@ const DeviceLicenseKeyManagement = () => {
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-600">
                               {formatDateTime(key.lastUpdate)}
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-600">
+                              <div className="flex items-center">
+                                {key.currentUsedBy ? (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                                    <span className="text-gray-800 font-medium">{key.currentUsedBy}</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
+                                    <span className="text-gray-400 italic">Not in use</span>
+                                  </div>
+                                )}
+                              </div>
                             </td>
                             <td className="px-6 py-4 text-sm text-gray-600">
                               {key.deviceInformation || 'N/A'}
