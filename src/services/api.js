@@ -33,8 +33,29 @@ class ApiService {
         return response;
       },
       (error) => {
-        // Handle 401 Unauthorized - Token expired or invalid
+        // Handle 401 Unauthorized - but exclude re-authentication endpoints
         if (error.response?.status === 401) {
+          const url = error.config?.url || '';
+          
+          // Don't redirect to login for re-authentication failures
+          if (url.includes('/api/ProfileSettings/re-authenticate')) {
+            console.log('Re-authentication failed - not redirecting to login');
+            return Promise.reject(error);
+          }
+          
+          // Don't redirect for secure database connection failures
+          if (url.includes('/api/ProfileSettings/secure-database-connection')) {
+            console.log('Secure database connection access denied - not redirecting to login');
+            return Promise.reject(error);
+          }
+          
+          // Don't redirect for non-encrypted profile failures
+          if (url.includes('/api/ProfileSettings/non-encrypted-profile')) {
+            console.log('Non-encrypted profile access denied - not redirecting to login');
+            return Promise.reject(error);
+          }
+          
+          // For all other 401 errors, handle as session expiry
           this.handleAuthenticationError();
         }
         return Promise.reject(error);
@@ -42,8 +63,10 @@ class ApiService {
     );
   }
 
-  // Handle authentication errors (401)
+  // Handle authentication errors (401) - but only for main session issues
   handleAuthenticationError() {
+    console.log('Main session authentication error - redirecting to login');
+    
     // Clear tokens
     localStorage.removeItem('authToken');
     localStorage.removeItem('customerData');
@@ -479,6 +502,210 @@ class ApiService {
 
     return this.makeRequest('POST', '/api/ProfileSettings/validate-profile', updateData);
   }
+
+  // Re-authenticate user for accessing sensitive database connection information
+  async reAuthenticate(email, password) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    // Use a special flag to identify this as a re-authentication request
+    try {
+      const config = {
+        method: 'POST',
+        url: '/api/ProfileSettings/re-authenticate',
+        data: {
+          Email: email,
+          Password: password
+        }
+      };
+
+      const response = await this.axiosInstance(config);
+      
+      return {
+        success: true,
+        data: response.data,
+        status: response.status,
+      };
+      
+    } catch (error) {
+      if (error.response?.status === 401) {
+        // This is a re-authentication failure, not a session expiry
+        const errorData = error.response.data;
+        let errorMessage = 'Invalid credentials. Please check your password and try again.';
+        
+        if (errorData?.message) {
+          errorMessage = errorData.message;
+        } else if (errorData?.Message) {
+          errorMessage = errorData.Message;
+        } else if (errorData?.data?.message) {
+          errorMessage = errorData.data.message;
+        }
+        
+        return {
+          success: false,
+          error: errorMessage,
+          status: 401,
+          isReAuthError: true, // Special flag to indicate this is a re-auth error
+        };
+      }
+      
+      // For other errors, use the standard error handling
+      return this.handleRequestError(error);
+    }
+  }
+
+  // Get secure database connection details (requires valid temp access token)
+  async getSecureDatabaseConnection(tempAccessToken) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    try {
+      const config = {
+        method: 'GET',
+        url: `/api/ProfileSettings/secure-database-connection?tempAccessToken=${encodeURIComponent(tempAccessToken)}`
+      };
+
+      const response = await this.axiosInstance(config);
+      
+      return {
+        success: true,
+        data: response.data,
+        status: response.status,
+      };
+      
+    } catch (error) {
+      if (error.response?.status === 401) {
+        // This is a token access denial, not a session expiry
+        return {
+          success: false,
+          error: 'Access denied. Please re-authenticate to view database connection details.',
+          status: 401,
+          isAccessDenied: true, // Special flag
+        };
+      }
+      
+      return this.handleRequestError(error);
+    }
+  }
+
+  // Get non-encrypted profile (requires valid temp access token)
+  async getNonEncryptedProfile(tempAccessToken) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    try {
+      const config = {
+        method: 'GET',
+        url: `/api/ProfileSettings/non-encrypted-profile?tempAccessToken=${encodeURIComponent(tempAccessToken)}`
+      };
+
+      const response = await this.axiosInstance(config);
+      
+      return {
+        success: true,
+        data: response.data,
+        status: response.status,
+      };
+      
+    } catch (error) {
+      if (error.response?.status === 401) {
+        // This is a token access denial, not a session expiry
+        return {
+          success: false,
+          error: 'Access denied. Please re-authenticate to view profile details.',
+          status: 401,
+          isAccessDenied: true, // Special flag
+        };
+      }
+      
+      return this.handleRequestError(error);
+    }
+  }
+
+  // Helper method to handle request errors (extracted from makeRequest)
+  handleRequestError(error) {
+    if (error.code === 'ECONNREFUSED' || error.message.includes('Network Error')) {
+      return {
+        success: false,
+        error: 'Unable to connect to server. Please check if the API server is running.',
+        status: 0,
+        isNetworkError: true,
+      };
+    }
+
+    if (error.response) {
+      // Server responded with error status
+      const errorData = error.response.data;
+      let errorMessage = 'An error occurred';
+      
+      // Handle different error status codes
+      if (error.response.status === 401) {
+        errorMessage = 'Authentication failed. Please log in again.';
+      } else if (error.response.status === 403) {
+        errorMessage = 'Access denied. You do not have permission to access this resource.';
+      } else if (error.response.status === 404) {
+        errorMessage = 'The requested resource was not found.';
+      } else if (error.response.status === 500) {
+        errorMessage = 'Internal server error. Please try again later.';
+      } else {
+        // Handle your API response structure
+        if (errorData && errorData.message) {
+          errorMessage = errorData.message;
+        } else if (errorData && errorData.Message) {
+          errorMessage = errorData.Message;
+        } else if (errorData && errorData.title) {
+          errorMessage = errorData.title;
+        } else {
+          errorMessage = `HTTP error! status: ${error.response.status}`;
+        }
+      }
+      
+      return {
+        success: false,
+        error: errorMessage,
+        status: error.response.status,
+        isAuthError: error.response.status === 401,
+      };
+    } else if (error.request) {
+      // Request was made but no response received
+      return {
+        success: false,
+        error: 'No response from server. Please check your connection.',
+        status: 0,
+        isNetworkError: true,
+      };
+    } else {
+      // Something else happened
+      return {
+        success: false,
+        error: error.message || 'An unexpected error occurred.',
+        status: 500,
+      };
+    }
+  }
+
+  // ...rest of your existing methods...
 }
 
 export default new ApiService();

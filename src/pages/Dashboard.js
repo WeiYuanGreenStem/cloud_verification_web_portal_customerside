@@ -44,7 +44,7 @@ const Dashboard = () => {
           
           <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-50">
             <Key size={20} />
-            <span>License Key</span>
+            <span>Device License Key</span>
           </button>
           
           <button className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-gray-600 hover:bg-gray-50">
@@ -71,7 +71,7 @@ const Dashboard = () => {
         {/* Statistics Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-            <h3 className="text-gray-600 text-sm mb-2">Total License Keys</h3>
+            <h3 className="text-gray-600 text-sm mb-2">Total Device License Keys</h3>
             <p className="text-4xl font-bold text-gray-800">{appStats.all}</p>
             <p className="text-sm text-teal-600 mt-2">All Applications</p>
           </div>
@@ -100,7 +100,7 @@ const Dashboard = () => {
           <h2 className="text-xl font-bold text-gray-800 mb-4">Quick Stats</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <h3 className="font-semibold text-gray-700 mb-3">License Key Status</h3>
+              <h3 className="font-semibold text-gray-700 mb-3">Device License Key Status</h3>
               <div className="space-y-2">
                 <div className="flex justify-between items-center">
                   <span className="text-gray-600">Active</span>
