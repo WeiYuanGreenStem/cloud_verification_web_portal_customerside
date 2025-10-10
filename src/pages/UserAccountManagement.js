@@ -51,44 +51,63 @@ const UserAccountManagement = () => {
     setShowCreateModal(true);
   };
   
-  const filteredUsers = applicationCodesToShow.length === 0
-    ? allUsers
-    : allUsers.filter(u => applicationCodesToShow.includes(u.applicationCode))
-  .filter(user => {
-    if (activeTab === 'all') return true;
-    return user.app === activeTab;
-  })
-  .filter(user => {
-    const search = searchTerm.toLowerCase();
-    return (
-      user.username.toLowerCase().includes(search) ||
-      user.userEmail.toLowerCase().includes(search) ||
-      user.jobPosition.toLowerCase().includes(search)
-    );
-  });
+  // Update the fetchApplications useEffect
+
+  // Fetch applications for tabs on mount
+  useEffect(() => {
+    const fetchApplications = async () => {
+      setLoadingApps(true);
+      try {
+        // Use the new method that extracts apps from user account data
+        const result = await ApiService.getUserApplicationsFromAccountData();
+        
+        if (result.success) {
+          console.log('Fetched applications from user data:', result.data);
+          setFetchedApps(result.data);
+        } else {
+          console.error('Failed to fetch applications:', result.error);
+          setFetchedApps([]);
+        }
+      } catch (error) {
+        console.error('Error fetching applications:', error);
+        setFetchedApps([]);
+      } finally {
+        setLoadingApps(false);
+      }
+    };
+
+    fetchApplications();
+  }, []);
 
   // Update applicationCodesToShow when activeTab or fetchedApps change
   useEffect(() => {
     if (activeTab === 'all') {
       setApplicationCodesToShow([]);
-      setExpandedParent(null); // collapse dropdown
       return;
     }
 
-    const result = [activeTab];
-    let foundParent = null;
+    // Find the active application and its related apps
+    const activeApp = fetchedApps.find(app => app.applicationCode === activeTab);
+    
+    if (!activeApp) {
+      setApplicationCodesToShow([]);
+      return;
+    }
 
-    fetchedApps.forEach((app) => {
-      if (app.parentApplicationCode === activeTab) {
-        result.push(app.applicationCode);
-      }
-      if (app.applicationCode === activeTab && app.parentApplicationCode) {
-        foundParent = app.parentApplicationCode;
-      }
-    });
+    let codesToShow = [activeTab];
 
-    setApplicationCodesToShow(result);
-    setExpandedParent(foundParent); // expand the parent if child is active
+    // If it's a parent app, include all its children
+    if (!activeApp.parentApplicationCode) {
+      const children = fetchedApps.filter(app => app.parentApplicationCode === activeTab);
+      codesToShow = [activeTab, ...children.map(child => child.applicationCode)];
+    }
+    // If it's a child app, only show that child
+    else {
+      codesToShow = [activeTab];
+    }
+
+    console.log('Active tab:', activeTab, 'Codes to show:', codesToShow);
+    setApplicationCodesToShow(codesToShow);
   }, [activeTab, fetchedApps]);
 
   // Fetch applications and usage stats on mount
@@ -174,21 +193,28 @@ const UserAccountManagement = () => {
     fetchUsers();
   }, [currentPage, rowsPerPage]);
   
-  // Fetch applications for tabs on mount
-  useEffect(() => {
-    const fetchApplications = async () => {
-      try {
-        const response = await ApiService.getApplication();
-        setFetchedApps(response); // [{applicationCode, applicationName, ...}]
-      } catch (error) {
-        console.error('Failed to fetch applications:', error);
-      } finally {
-        setLoadingApps(false);
-      }
-    };
-
-    fetchApplications();
-  }, []);
+  // Update the filteredUsers logic
+  const filteredUsers = allUsers.filter(user => {
+    // First filter by application
+    if (activeTab === 'all') {
+      // Show all users
+      return true;
+    } else if (applicationCodesToShow.length > 0) {
+      // Show users from specific application codes
+      return applicationCodesToShow.includes(user.app);
+    }
+    return false;
+  }).filter(user => {
+    // Then filter by search term
+    const search = searchTerm.toLowerCase();
+    return (
+      user.username.toLowerCase().includes(search) ||
+      user.userEmail.toLowerCase().includes(search) ||
+      user.jobPosition.toLowerCase().includes(search) ||
+      user.area?.toLowerCase().includes(search) ||
+      user.appName?.toLowerCase().includes(search)
+    );
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 flex">
@@ -218,37 +244,44 @@ const UserAccountManagement = () => {
           {/* Table Section */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100">
             {/* Filter and Search Bar */}
-            <div className="p-4 border-b border-gray-200 flex flex-wrap items-center justify-between">
-              <ApplicationTabs
-                apps={fetchedApps}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                loading={loadingApps}
-                expandedParent={expandedParent}
-                setExpandedParent={setExpandedParent}
-              />
-              {/* Right-side Controls */}
-              <div className="flex gap-2 mt-4 sm:mt-0">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                  <input
-                    type="text"
-                    placeholder="Search"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
+            <div className="p-4 border-b border-gray-200">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                {/* Application Tabs */}
+                <div className="flex-1 min-w-0">
+                  <ApplicationTabs
+                    apps={fetchedApps}
+                    activeTab={activeTab}
+                    setActiveTab={setActiveTab}
+                    loading={loadingApps}
+                    expandedParent={expandedParent}
+                    setExpandedParent={setExpandedParent}
                   />
                 </div>
-                <button
-                  onClick={handleCreateUser}
-                  className="px-4 py-2 bg-gray-800 text-white rounded-lg flex items-center gap-2 hover:bg-gray-700 transition-colors"
-                >
-                  <Plus size={20} />
-                  <span className="hidden sm:inline">Create New User</span>
-                </button>
+
+                {/* Right-side Controls */}
+                <div className="flex gap-2 shrink-0">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                    <input
+                      type="text"
+                      placeholder="Search users..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 w-64"
+                    />
+                  </div>
+                  <button
+                    onClick={handleCreateUser}
+                    className="px-4 py-2 bg-gray-800 text-white rounded-lg flex items-center gap-2 hover:bg-gray-700 transition-colors"
+                  >
+                    <Plus size={20} />
+                    <span className="hidden sm:inline">Create User</span>
+                  </button>
+                </div>
               </div>
             </div>
-            {/* Table - keeping your existing table structure */}
+
+            {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-800 text-white">
@@ -267,62 +300,67 @@ const UserAccountManagement = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
-                  {filteredUsers.slice(0, rowsPerPage).map((user, index) => (
-                    <tr key={index} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 text-sm text-gray-800 font-medium">{user.username}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.userEmail}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.appName}</td>
-                      <td className="px-6 py-4">
-                        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          user.status === 'Active' 
-                            ? 'bg-green-100 text-green-700' 
-                            : 'bg-red-100 text-red-700'
-                        }`}>
-                          {user.status}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.jobPosition}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">{user.area}</td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {user.createDate ? new Date(user.createDate).toLocaleDateString() : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {user.lastActive ? new Date(user.lastActive).toLocaleString() : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {user.lastUpdate ? new Date(user.lastUpdate).toLocaleString() : '-'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-600">
-                        {user.lastDeviceUsed || '-'}
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleEdit(user.username)}
-                            className="text-green-600 hover:text-green-700 transition-colors"
-                            title="Edit"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(user.username)}
-                            className="text-red-600 hover:text-red-700 transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
+                  {filteredUsers.length === 0 ? (
+                    <tr>
+                      <td colSpan="11" className="px-6 py-8 text-center text-gray-500">
+                        {loadingUsers ? 'Loading users...' : 
+                         searchTerm ? 'No users match your search criteria' : 
+                         activeTab !== 'all' ? 'No users found for selected application' :
+                         'No users found'
+                        }
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    filteredUsers.slice(0, rowsPerPage).map((user, index) => (
+                      <tr key={`${user.userCode}-${index}`} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 text-sm text-gray-800 font-medium">{user.username}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{user.userEmail}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{user.appName}</td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                            user.status === 'Active' 
+                              ? 'bg-green-100 text-green-700' 
+                              : 'bg-red-100 text-red-700'
+                          }`}>
+                            {user.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{user.jobPosition}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">{user.area}</td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {user.createDate ? new Date(user.createDate).toLocaleDateString() : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {user.lastActive ? new Date(user.lastActive).toLocaleString() : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {user.lastUpdate ? new Date(user.lastUpdate).toLocaleString() : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-gray-600">
+                          {user.lastDeviceUsed || '-'}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-2">
+                            <button 
+                              onClick={() => handleEdit(user.username)}
+                              className="text-green-600 hover:text-green-700 transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 size={18} />
+                            </button>
+                            <button 
+                              onClick={() => handleDelete(user.username)}
+                              className="text-red-600 hover:text-red-700 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
-                {loadingUsers ? (
-                  <div className="p-6 text-center text-gray-500">Loading users...</div>
-                ) : (
-                  <table className="w-full">
-                    {/* ...table structure... */}
-                  </table>
-                )}
               </table>
             </div>
 
@@ -338,7 +376,7 @@ const UserAccountManagement = () => {
                   }}
                   className="border border-gray-300 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <option value={7}>5</option>
+                  <option value={5}>5</option>
                   <option value={10}>10</option>
                   <option value={20}>20</option>
                   <option value={50}>50</option>

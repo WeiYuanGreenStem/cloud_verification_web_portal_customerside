@@ -292,6 +292,61 @@ class ApiService {
     return this.makeRequest('GET', `/api/DeviceLicenseKey/details/${deviceLicenseKeyCode}`);
   }
 
+  // ===== DEVICE LICENSE KEY APPROVAL METHODS =====
+  
+  // Customer approve device license key
+  async customerApproveDeviceLicenseKey(deviceLicenseKeyCode, remarks = '') {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('POST', '/api/DeviceLicenseKey/customer/approve', {
+      DeviceLicenseKeyCode: deviceLicenseKeyCode,
+      Action: 'APPROVE',
+      Remarks: remarks || 'Approved by customer'
+    });
+  }
+
+  // Customer deny device license key
+  async customerDenyDeviceLicenseKey(deviceLicenseKeyCode, remarks = '') {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('POST', '/api/DeviceLicenseKey/customer/deny', {
+      DeviceLicenseKeyCode: deviceLicenseKeyCode,
+      Action: 'DENY',
+      Remarks: remarks || 'Denied by customer'
+    });
+  }
+
+  // Get pending device license keys for customer
+  async getPendingDeviceLicenseKeysForCustomer(customerCode) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('GET', `/api/DeviceLicenseKey/customer/${customerCode}/pending`);
+  }
+
   // ===== UTILITY METHODS =====
 
   // Logout
@@ -705,7 +760,143 @@ class ApiService {
     }
   }
 
-  // ...rest of your existing methods...
+  // Extract applications from user account data
+  async getUserApplicationsFromAccountData() {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    try {
+      // Get user account data
+      const result = await this.getUserAccountList({ pageNumber: 1, pageSize: 1000 });
+      
+      if (result?.data) {
+        const applicationsMap = new Map();
+        
+        // Process each item in the API response data
+        result.data.forEach(item => {
+          // Add child application (the actual application with users)
+          if (!applicationsMap.has(item.applicationCode)) {
+            applicationsMap.set(item.applicationCode, {
+              applicationCode: item.applicationCode,
+              applicationName: item.applicationName,
+              parentApplicationCode: item.parentApplicationCode,
+              parentApplicationName: item.parentApplicationName,
+              userCount: item.users?.length || 0,
+              isChild: !!item.parentApplicationCode
+            });
+          }
+          
+          // Add parent application if it exists and hasn't been added yet
+          if (item.parentApplicationCode && item.parentApplicationName && !applicationsMap.has(item.parentApplicationCode)) {
+            applicationsMap.set(item.parentApplicationCode, {
+              applicationCode: item.parentApplicationCode,
+              applicationName: item.parentApplicationName,
+              parentApplicationCode: null,
+              parentApplicationName: null,
+              userCount: 0, // Will be calculated below
+              isChild: false
+            });
+          }
+        });
+        
+        // Calculate user counts for parent applications
+        applicationsMap.forEach((app, code) => {
+          if (!app.parentApplicationCode) {
+            // This is a parent app, count users from all child apps
+            let totalUsers = 0;
+            result.data.forEach(item => {
+              if (item.parentApplicationCode === code) {
+                totalUsers += item.users?.length || 0;
+              }
+            });
+            app.userCount = totalUsers;
+          }
+        });
+        
+        const applications = Array.from(applicationsMap.values());
+        
+        console.log('Extracted applications from user account data:', applications);
+        
+        return {
+          success: true,
+          data: applications,
+          status: 200,
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Failed to fetch user account data',
+          status: 500,
+        };
+      }
+    } catch (error) {
+      console.error('Error extracting applications from user account data:', error);
+      return {
+        success: false,
+        error: error.message || 'An unexpected error occurred.',
+        status: 500,
+      };
+    }
+  }
+
+  // ===== ACTIVITY TRACKING METHODS =====
+  
+  // Get recent activities for dashboard
+  async getRecentActivities(customerCode, limit = 10) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('GET', `/api/Activity/recent/${customerCode}?limit=${limit}`);
+  }
+
+  // Get activity logs with filters
+  async getActivityLogs(customerCode, filters = {}) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    const queryParams = new URLSearchParams({
+      customerCode,
+      ...filters
+    }).toString();
+
+    return this.makeRequest('GET', `/api/Activity/logs?${queryParams}`);
+  }
+
+  // Log activity (for frontend actions)
+  async logActivity(activityData) {
+    const token = localStorage.getItem('authToken');
+    if (!token) {
+      return {
+        success: false,
+        error: 'Authentication token is required. Please log in again.',
+        status: 401,
+        isAuthError: true,
+      };
+    }
+
+    return this.makeRequest('POST', '/api/Activity/log', activityData);
+  }
 }
 
 export default new ApiService();

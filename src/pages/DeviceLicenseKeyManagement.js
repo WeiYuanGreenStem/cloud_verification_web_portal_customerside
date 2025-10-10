@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef} from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Edit2, Trash2, RefreshCw, AlertCircle, Smartphone, Warehouse, Users, Briefcase, TrendingUp} from 'lucide-react';
+import { Search, Edit2, Trash2, RefreshCw, AlertCircle, Smartphone, Warehouse, Users, Briefcase, TrendingUp, Check, X, MessageSquare} from 'lucide-react';
 import Sidebar from '../components/Sidebar';
 import Header from '../components/Header';
 import ApiService from '../services/api';
@@ -20,6 +20,17 @@ const DeviceLicenseKeyManagement = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [isRefreshing, setIsRefreshing] = useState(false);
+
+  // Approval/Denial states
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [selectedKey, setSelectedKey] = useState(null);
+  const [approvalAction, setApprovalAction] = useState(''); // 'approve' or 'deny'
+  const [approvalRemarks, setApprovalRemarks] = useState('');
+  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
+
+  // Success notification state
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
   // Authentication protection
   useEffect(() => {
@@ -150,6 +161,85 @@ const DeviceLicenseKeyManagement = () => {
       fetchDeviceLicenseKeys();
     }
   }, [navigate]);
+
+  // Handle approval/denial button clicks
+  const handleApprovalAction = (key, action) => {
+    setSelectedKey(key);
+    setApprovalAction(action);
+    setApprovalRemarks('');
+    setShowApprovalModal(true);
+  };
+
+  // Process approval/denial
+  const handleProcessApproval = async () => {
+    if (!selectedKey || !approvalAction) return;
+
+    setIsProcessingApproval(true);
+    try {
+      let result;
+      
+      const finalRemarks = approvalRemarks && approvalRemarks.trim() 
+        ? approvalRemarks.trim() 
+        : (approvalAction === 'approve' 
+            ? 'Approved by customer via web portal' 
+            : 'Denied by customer via web portal');
+      
+      if (approvalAction === 'approve') {
+        result = await ApiService.customerApproveDeviceLicenseKey(
+          selectedKey.deviceLicenseKeyCode, 
+          finalRemarks
+        );
+      } else {
+        result = await ApiService.customerDenyDeviceLicenseKey(
+          selectedKey.deviceLicenseKeyCode, 
+          finalRemarks
+        );
+      }
+
+      if (result.success && (result.data?.success === true || result.data?.Success === true)) {
+        // Success - close modal
+        setShowApprovalModal(false);
+        setSelectedKey(null);
+        const currentAction = approvalAction;
+        setApprovalAction('');
+        setApprovalRemarks('');
+        
+        // Clear any existing errors
+        setError('');
+        
+        // Show success message
+        setSuccessMessage(`Device license key ${currentAction}d successfully!`);
+        setShowSuccessMessage(true);
+        
+        // Hide success message after 3 seconds
+        setTimeout(() => {
+          setShowSuccessMessage(false);
+          setSuccessMessage('');
+        }, 3000);
+        
+        // Refresh data to show updated status
+        await fetchDeviceLicenseKeys();
+        
+      } else {
+        const errorMessage = result.data?.message || result.data?.Message || result.error || `Failed to ${approvalAction} device license key`;
+        setError(errorMessage);
+      }
+      
+    } catch (error) {
+      console.error(`Error ${approvalAction}ing device license key:`, error);
+      setError(error.message || `An unexpected error occurred while ${approvalAction}ing the device license key`);
+    } finally {
+      setIsProcessingApproval(false);
+    }
+  };
+
+  // Close approval modal
+  const handleCloseApprovalModal = () => {
+    setShowApprovalModal(false);
+    setSelectedKey(null);
+    setApprovalAction('');
+    setApprovalRemarks('');
+  };
 
   const handleEdit = (deviceLicenseKeyCode) => {
     console.log('Edit license key:', deviceLicenseKeyCode);
@@ -317,6 +407,14 @@ const DeviceLicenseKeyManagement = () => {
             </div>
           )}
 
+          {/* Success Message Display */}
+          {showSuccessMessage && successMessage && (
+            <div className="mb-6 p-4 bg-green-100 border border-green-400 text-green-700 rounded-lg flex items-center gap-2">
+              <Check size={20} />
+              <span>{successMessage}</span>
+            </div>
+          )}
+
           {/* Loading State */}
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -325,7 +423,7 @@ const DeviceLicenseKeyManagement = () => {
             </div>
           ) : (
             <>
-               {/* Statistics Cards */}
+              {/* Statistics Cards - keeping your existing statistics cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 {/* All Applications Card */}
                 <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 p-6 text-white relative overflow-hidden group">
@@ -516,20 +614,45 @@ const DeviceLicenseKeyManagement = () => {
                             </td>
                             <td className="px-6 py-4">
                               <div className="flex gap-2">
-                                <button 
-                                  onClick={() => handleEdit(key.deviceLicenseKeyCode)}
-                                  className="text-teal-600 hover:text-teal-700 transition-colors"
-                                  title="Edit"
-                                >
-                                  <Edit2 size={18} />
-                                </button>
-                                <button 
-                                  onClick={() => handleDelete(key.deviceLicenseKeyCode)}
-                                  className="text-red-600 hover:text-red-700 transition-colors"
-                                  title="Delete"
-                                >
-                                  <Trash2 size={18} />
-                                </button>
+                                {/* Show Approve/Deny buttons only for pending status */}
+                                {key.statusName?.toLowerCase() === 'pending' ? (
+                                  <>
+                                    <button 
+                                      onClick={() => handleApprovalAction(key, 'approve')}
+                                      className="flex items-center gap-1 px-3 py-1 text-xs bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
+                                      title="Approve"
+                                    >
+                                      <Check size={14} />
+                                      Approve
+                                    </button>
+                                    <button 
+                                      onClick={() => handleApprovalAction(key, 'deny')}
+                                      className="flex items-center gap-1 px-3 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                                      title="Deny"
+                                    >
+                                      <X size={14} />
+                                      Deny
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    {/* Regular Edit/Delete buttons for non-pending items */}
+                                    <button 
+                                      onClick={() => handleEdit(key.deviceLicenseKeyCode)}
+                                      className="text-teal-600 hover:text-teal-700 transition-colors"
+                                      title="Edit"
+                                    >
+                                      <Edit2 size={18} />
+                                    </button>
+                                    <button 
+                                      onClick={() => handleDelete(key.deviceLicenseKeyCode)}
+                                      className="text-red-600 hover:text-red-700 transition-colors"
+                                      title="Delete"
+                                    >
+                                      <Trash2 size={18} />
+                                    </button>
+                                  </>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -539,7 +662,7 @@ const DeviceLicenseKeyManagement = () => {
                   </table>
                 </div>
 
-                {/* Pagination */}
+                {/* Pagination - keeping your existing pagination */}
                 <div className="p-4 border-t border-gray-200 flex items-center justify-between">
                   <div className="text-sm text-gray-600 flex items-center gap-2">
                     <span>Rows per page:</span>
@@ -641,6 +764,91 @@ const DeviceLicenseKeyManagement = () => {
           )}
         </div>
       </div>
+
+      {/* Approval/Denial Modal */}
+      {showApprovalModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center gap-3 mb-4">
+              {approvalAction === 'approve' ? (
+                <div className="p-2 bg-green-100 rounded-full">
+                  <Check size={20} className="text-green-600" />
+                </div>
+              ) : (
+                <div className="p-2 bg-red-100 rounded-full">
+                  <X size={20} className="text-red-600" />
+                </div>
+              )}
+              <h2 className="text-xl font-bold text-gray-800">
+                {approvalAction === 'approve' ? 'Approve' : 'Deny'} License Key
+              </h2>
+            </div>
+            
+            <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-sm text-gray-600 mb-1">License Key:</p>
+              <p className="font-mono text-sm font-medium">{selectedKey?.deviceLicenseKey}</p>
+              <p className="text-sm text-gray-600 mb-1 mt-2">Application:</p>
+              <p className="text-sm font-medium">{selectedKey?.applicationName}</p>
+              <p className="text-sm text-gray-600 mb-1 mt-2">Current Device Info:</p>
+              <p className="text-sm font-medium">{selectedKey?.deviceInformation || 'N/A'}</p>
+            </div>
+
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> {approvalAction === 'approve' ? 'Approving' : 'Denying'} this license key will change its status to {approvalAction === 'approve' ? 'Active' : 'Denied'}. 
+                The device information will remain unchanged.
+              </p>
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Approval Remarks <span className="text-gray-400">(Optional)</span>
+              </label>
+              <textarea
+                value={approvalRemarks}
+                onChange={(e) => setApprovalRemarks(e.target.value)}
+                placeholder={`Add your reason for ${approvalAction}ing this license key...`}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={3}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                {approvalAction === 'approve' 
+                  ? 'Default: "Approved by customer via web portal"' 
+                  : 'Default: "Denied by customer via web portal"'
+                }
+              </p>
+            </div>
+
+            <div className="flex gap-3">
+              <button 
+                onClick={handleCloseApprovalModal}
+                disabled={isProcessingApproval}
+                className="flex-1 px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={handleProcessApproval}
+                disabled={isProcessingApproval}
+                className={`flex-1 px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 ${
+                  approvalAction === 'approve' 
+                    ? 'bg-green-600 hover:bg-green-700' 
+                    : 'bg-red-600 hover:bg-red-700'
+                }`}
+              >
+                {isProcessingApproval ? (
+                  <div className="flex items-center justify-center gap-2">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    Processing...
+                  </div>
+                ) : (
+                  `${approvalAction === 'approve' ? 'Approve' : 'Deny'} License Key`
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
